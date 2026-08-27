@@ -1,36 +1,145 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Awthor
 
-## Getting Started
+> A simple, focused web app for planning, writing, and finishing novels.
 
-First, run the development server:
+[![Next.js](https://img.shields.io/badge/Next.js-16.3.3-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.2.8-149ECA?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Bun](https://img.shields.io/badge/Bun-1.4.0-000000?logo=bun&logoColor=white)](https://bun.sh/)
+[![Biome](https://img.shields.io/badge/Biome-2.4.2-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
+[![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
+![Open source](https://img.shields.io/badge/Open_Source-Yes-4D7C0F?logo=opensourceinitiative&logoColor=white)
+![Storage](https://img.shields.io/badge/Manuscript_Storage-Your_Device-5F6B4E)
+
+Awthor is a completely free and open-source, local-first writing app for novelists. The hosted
+version is designed to keep manuscripts on the writer's computer instead of storing them in an
+Awthor server database.
+
+The current v1 is a polished, responsive front-end prototype with a marketing landing page and a
+demo writing library. It is intentionally mock-data-first so product flows and visual direction
+can be tested before client-side persistence and the editor are implemented.
+
+## Current pages
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Marketing landing page with product positioning, an editor preview, features, and calls to action |
+| `/books` | Mock local library with writing stats, goals, progress, and four demo novels |
+
+## Tech stack
+
+| Area | Technology | Use |
+| --- | --- | --- |
+| Framework | [Next.js 16](https://nextjs.org/) App Router | Routing, layouts, metadata, server rendering, and production builds |
+| UI runtime | [React 19](https://react.dev/) | Component model and rendering |
+| Language | [TypeScript 5](https://www.typescriptlang.org/) | Strict static typing |
+| Styling | [Tailwind CSS 4](https://tailwindcss.com/) | Utility-first responsive styling and design tokens |
+| Component system | [shadcn](https://ui.shadcn.com/) + [Base UI](https://base-ui.com/) | Accessible, locally owned UI primitives |
+| Variants and class composition | [CVA](https://cva.style/), [clsx](https://github.com/lukeed/clsx), and [tailwind-merge](https://github.com/dcastil/tailwind-merge) | Reusable variants and conflict-safe class composition |
+| Motion | [tw-animate-css](https://github.com/Wombosvideo/tw-animate-css) + [Motion Icons](https://www.npmjs.com/package/motion-icons-react) | Animation utilities and animated icon support |
+| Icons | [Lucide React](https://lucide.dev/) | Interface iconography |
+| Validation | [Zod 4](https://zod.dev/) | Planned runtime schema and form validation |
+| Fonts | [`next/font`](https://nextjs.org/docs/app/getting-started/fonts) | Self-hosted Outfit, Nunito Sans, and Geist Mono |
+| Compiler | [React Compiler](https://react.dev/learn/react-compiler) | Automatic component optimization |
+| Tooling | [Bun](https://bun.sh/) | Package manager and script runtime |
+| Quality | [Biome](https://biomejs.dev/) | Formatting, linting, import organization, React, and Next.js rules |
+| CSS pipeline | [PostCSS](https://postcss.org/) | Tailwind CSS compilation |
+| Deployment | [Vercel](https://vercel.com/) | Next.js hosting configuration through `vercel.json` |
+
+## Local-first data and privacy
+
+- The hosted interface runs in the writer's browser.
+- Manuscripts and project data belong in client-side storage on the writer's computer.
+- The hosted deployment does not use an Awthor-owned server database for manuscript content.
+- The current prototype uses static demo data; browser persistence is the next implementation
+  milestone.
+- Import, export, and backup tools will be important because local data does not automatically
+  follow a writer to another browser or device.
+
+## Getting started
+
+Requirements:
+
+- [Bun 1.4+](https://bun.sh/docs/installation)
+- Node.js 20+ for editor and ecosystem compatibility
+
+Install dependencies and start the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
+bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Description |
+| --- | --- |
+| `bun dev` | Start the Next.js development server with Bun |
+| `bun run build` | Create an optimized production build |
+| `bun start` | Serve the production build |
+| `bun run lint` | Run Biome checks across the project |
+| `bun run format` | Format supported files with Biome |
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```text
+src/
+├── app/
+│   ├── books/page.tsx   # Demo book library
+│   ├── globals.css      # Tailwind imports and global design tokens
+│   ├── layout.tsx       # Fonts, metadata, and social preview config
+│   └── page.tsx         # Marketing landing page
+├── components/ui/       # shadcn/Base UI components
+└── lib/utils.ts         # Shared class-name helper
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+biome.json               # Formatter and linter rules
+components.json          # shadcn configuration
+next.config.ts           # Next.js and React Compiler settings
+vercel.json              # Bun-based Vercel build configuration
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Code quality
 
-## Deploy on Vercel
+Biome is configured with recommended JavaScript/TypeScript rules plus the React and Next.js
+domains. It also enforces unused-code cleanup, type-only imports, exhaustive hook dependencies,
+safe non-null handling, consistent formatting, and automatic import organization.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Run the full local quality pass with:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+bun run lint
+bun run build
+```
+
+## Deploying to Vercel
+
+Import the repository into Vercel. The included `vercel.json` selects Next.js and uses Bun for
+install, development, and production build commands.
+
+Vercel hosts the application files and interface only. Awthor does not require a server-side
+manuscript database; writing data is intended to remain in browser storage on the user's device.
+
+Set `NEXT_PUBLIC_SITE_URL` to the final production origin, for example
+`https://awthor.example.com`, so absolute social-sharing metadata uses the deployed URL.
+
+## v1 scope
+
+Included now:
+
+- Responsive landing page
+- Responsive demo book library
+- Demo writing goals and progress data
+- Page metadata and branded social preview
+- Vercel and Biome configuration
+
+Natural next steps:
+
+- Client-side persistence for books, chapters, and notes
+- Distraction-free manuscript editor
+- On-device autosave and version history
+- Export to DOCX, PDF, and EPUB
+- Import, backup, and restore flows
+- Offline/PWA support
