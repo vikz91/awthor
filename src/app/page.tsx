@@ -3,6 +3,7 @@ import {
   BookOpenText,
   Check,
   Code2,
+  ExternalLink,
   Feather,
   Focus,
   HardDrive,
@@ -11,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import { BrandMark } from "@/components/brand-mark";
 
 const features = [
   {
@@ -42,9 +44,7 @@ export default function Home() {
             className="flex items-center gap-2.5 font-heading text-xl font-semibold tracking-tight"
             href="/"
           >
-            <span className="grid size-9 place-items-center rounded-xl bg-[#282b24] text-[#f8f6f1] shadow-[0_6px_18px_rgba(35,35,31,0.18)]">
-              <Feather aria-hidden="true" className="size-4.5" />
-            </span>
+            <BrandMark className="shadow-[0_6px_18px_rgba(35,35,31,0.18)]" />
             awthor
           </Link>
 
@@ -288,12 +288,103 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-[#85857c] sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
-        <span className="flex items-center gap-2 font-heading font-semibold text-[#4c4d45]">
-          <Feather aria-hidden="true" className="size-4" />
-          awthor
-        </span>
-        <span>Free · Open source · Local-first</span>
+      <footer className="mt-8 border-t border-[#23231f]/8 bg-[#eeede7]">
+        <div className="mx-auto w-full max-w-7xl px-5 pt-14 pb-8 sm:px-8 lg:px-12 lg:pt-16">
+          <div className="grid gap-12 border-b border-[#23231f]/10 pb-12 sm:grid-cols-2 lg:grid-cols-[1.5fr_0.75fr_0.75fr] lg:gap-16">
+            <div className="max-w-sm">
+              <Link
+                className="inline-flex items-center gap-2.5 font-heading text-xl font-semibold tracking-tight text-[#30312b]"
+                href="/"
+              >
+                <BrandMark size={36} />
+                awthor
+              </Link>
+              <p className="mt-5 text-sm leading-6 text-[#74746b]">
+                A calm, completely free writing space for planning, drafting, and finishing your
+                novel—without giving your manuscript to the cloud.
+              </p>
+              <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#697557]/15 bg-[#dfe5d0]/65 px-3.5 py-2 text-xs font-bold text-[#59634b]">
+                <HardDrive aria-hidden="true" className="size-3.5" />
+                Your words stay on your device
+              </div>
+            </div>
+
+            <nav aria-label="Explore Awthor">
+              <h2 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#98978f]">
+                Explore
+              </h2>
+              <ul className="mt-5 space-y-3 text-sm font-semibold text-[#62635b]">
+                <li>
+                  <a className="transition-colors hover:text-[#252620]" href="#features">
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a className="transition-colors hover:text-[#252620]" href="#how-it-works">
+                    How it works
+                  </a>
+                </li>
+                <li>
+                  <a className="transition-colors hover:text-[#252620]" href="#open-source">
+                    Local-first approach
+                  </a>
+                </li>
+                <li>
+                  <Link className="transition-colors hover:text-[#252620]" href="/books">
+                    Demo library
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+
+            <nav aria-label="Awthor project">
+              <h2 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#98978f]">
+                Project
+              </h2>
+              <ul className="mt-5 space-y-3 text-sm font-semibold text-[#62635b]">
+                <li>
+                  <a
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-[#252620]"
+                    href="https://github.com/vikz91/awthor"
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <Code2 aria-hidden="true" className="size-4" />
+                    Source code
+                    <ExternalLink aria-hidden="true" className="size-3" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-[#252620]"
+                    href="https://github.com/vikz91/awthor/blob/main/LICENSE"
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    AGPL-3.0 license
+                    <ExternalLink aria-hidden="true" className="size-3" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-[#252620]"
+                    href="https://github.com/vikz91/awthor/issues"
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Report an issue
+                    <ExternalLink aria-hidden="true" className="size-3" />
+                  </a>
+                </li>
+              </ul>
+            </nav>
+          </div>
+
+          <div className="flex flex-col gap-3 pt-7 text-xs font-semibold text-[#85857c] sm:flex-row sm:items-center sm:justify-between">
+            <p>© 2026 Awthor contributors.</p>
+            <p>Free · Open source · Local-first</p>
+          </div>
+        </div>
       </footer>
     </div>
   );

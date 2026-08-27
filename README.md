@@ -9,7 +9,7 @@
 [![Bun](https://img.shields.io/badge/Bun-1.4.0-000000?logo=bun&logoColor=white)](https://bun.sh/)
 [![Biome](https://img.shields.io/badge/Biome-2.4.2-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
-![Open source](https://img.shields.io/badge/Open_Source-Yes-4D7C0F?logo=opensourceinitiative&logoColor=white)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-4D7C0F?logo=gnu&logoColor=white)](LICENSE)
 ![Storage](https://img.shields.io/badge/Manuscript_Storage-Your_Device-5F6B4E)
 
 Awthor is a completely free and open-source, local-first writing app for novelists. The hosted
@@ -143,3 +143,8 @@ Natural next steps:
 - Export to DOCX, PDF, and EPUB
 - Import, backup, and restore flows
 - Offline/PWA support
+
+## License
+
+Awthor is free and open-source software licensed under the
+[GNU Affero General Public License v3.0](LICENSE).

@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  Feather,
   Flame,
   HardDrive,
   LayoutGrid,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BrandMark } from "@/components/brand-mark";
 
 export const metadata: Metadata = {
   title: "Your books",
@@ -85,9 +85,7 @@ export default function BooksPage() {
             className="flex items-center gap-2.5 px-2 font-heading text-xl font-semibold tracking-tight"
             href="/"
           >
-            <span className="grid size-9 place-items-center rounded-xl bg-[#2d3029] text-white shadow-[0_6px_16px_rgba(45,48,41,0.16)]">
-              <Feather aria-hidden="true" className="size-4.5" />
-            </span>
+            <BrandMark className="shadow-[0_6px_16px_rgba(45,48,41,0.16)]" />
             awthor
           </Link>
 
@@ -150,9 +148,7 @@ export default function BooksPage() {
               className="flex items-center gap-2 font-heading text-lg font-semibold lg:hidden"
               href="/"
             >
-              <span className="grid size-8 place-items-center rounded-lg bg-[#2d3029] text-white">
-                <Feather aria-hidden="true" className="size-4" />
-              </span>
+              <BrandMark size={32} />
               awthor
             </Link>
             <div className="relative hidden w-full max-w-sm sm:block">
