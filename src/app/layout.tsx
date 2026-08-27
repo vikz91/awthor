@@ -1,7 +1,26 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Nunito_Sans, Outfit } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
+
+const themeScript = `
+  (() => {
+    const themes = ["light", "dark", "paper"];
+    let theme = "paper";
+
+    try {
+      const savedTheme = localStorage.getItem("awthor-theme");
+      if (savedTheme && themes.includes(savedTheme)) theme = savedTheme;
+    } catch {}
+
+    const root = document.documentElement;
+    root.classList.remove(...themes);
+    root.classList.add(theme);
+    root.dataset.theme = theme;
+    root.style.colorScheme = theme === "dark" ? "dark" : "light";
+  })();
+`;
 
 const outfitHeading = Outfit({
   subsets: ["latin"],
@@ -26,6 +45,13 @@ export const metadata: Metadata = {
   },
   description:
     "A free, open-source novel-writing workspace that keeps your manuscript on your device.",
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   openGraph: {
     title: "Awthor — A quieter place to write your novel",
     description:
@@ -47,6 +73,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       data-scroll-behavior="smooth"
+      suppressHydrationWarning
       className={cn(
         "h-full antialiased",
         nunitoSans.variable,
@@ -54,7 +81,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         geistMono.variable,
       )}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <head>
+        <script>{themeScript}</script>
+      </head>
+      <body className="flex min-h-full flex-col">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

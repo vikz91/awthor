@@ -25,7 +25,10 @@ can be tested before client-side persistence and the editor are implemented.
 | Route | Purpose |
 | --- | --- |
 | `/` | Marketing landing page with product positioning, an editor preview, features, and calls to action |
-| `/books` | Mock local library with writing stats, goals, progress, and four demo novels |
+| `/onboarding` | Three-step author profile, writing preferences, theme, and local-storage setup |
+| `/books` | Local library with writing stats, goals, progress, and four demo novels |
+| `/books/[bookId]` | Book overview with metadata, preface, series information, and manuscript statistics |
+| `/books/[bookId]/characters` | Interactive mock character roster with editable dossiers and add, hide, and delete actions |
 
 ## Tech stack
 
@@ -130,7 +133,10 @@ Set `NEXT_PUBLIC_SITE_URL` to the final production origin, for example
 Included now:
 
 - Responsive landing page
-- Responsive demo book library
+- Author onboarding and theme setup
+- Responsive shadcn-based book library
+- Book metadata and series overview
+- Interactive character roster and editor
 - Demo writing goals and progress data
 - Page metadata and branded social preview
 - Vercel and Biome configuration
