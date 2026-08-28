@@ -43,6 +43,7 @@ import {
   type Chapter,
   createDefaultBookProofreadingSettings,
   createManuscriptAutosave,
+  type DocumentLayout,
   getAwthorRepository,
   type ManuscriptAutosave,
   resolveBookProofreadingSettings,
@@ -57,6 +58,7 @@ import { ChapterChooser } from "./chapter-chooser";
 import { ChapterProgressRail } from "./chapter-progress-rail";
 import { FocusModeControls } from "./focus-mode-controls";
 import { EmptyManuscript, MarkdownManuscript } from "./markdown-manuscript";
+import { PagedManuscript } from "./paged-manuscript";
 import { type SelectionFormatPosition, SelectionFormatToolbar } from "./selection-format-toolbar";
 
 type BookWorkspaceProps = {
@@ -96,6 +98,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const [proofreadingPreferences, setProofreadingPreferences] = useState<BookProofreadingSettings>(
     createDefaultBookProofreadingSettings,
   );
+  const [documentLayout, setDocumentLayout] = useState<DocumentLayout>("seamless");
 
   const autosaveRef = useRef<ManuscriptAutosave | null>(null);
   const bookRef = useRef<Book | null>(null);
@@ -109,6 +112,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const focusModeStateRef = useRef<FocusModeState>(focusModeState);
   const focusEntryPositionRef = useRef(0);
   const pendingFocusExitPositionRef = useRef<number | null>(null);
+  const pendingLayoutPositionRef = useRef<number | null>(null);
   const fullscreenVerificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inspectorPositionRef = useRef<number | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -211,6 +215,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         const data = await repository.getData();
         const nextBook = data.books.find((item) => item.id === bookId) ?? null;
         updateSettings(data.settings);
+        setDocumentLayout(data.settings.editor.layout);
 
         if (!nextBook) {
           updateBook(null);
@@ -338,6 +343,64 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     }
     restoreNormalizedScrollPosition(position);
   }, []);
+
+  const restorePendingLayoutPosition = useCallback(() => {
+    const position = pendingLayoutPositionRef.current;
+    if (position === null) {
+      return;
+    }
+
+    pendingLayoutPositionRef.current = null;
+    requestAnimationFrame(() => restoreCurrentScrollPosition(position));
+  }, [restoreCurrentScrollPosition]);
+
+  const changeDocumentLayout = useCallback(
+    async (nextLayout: DocumentLayout) => {
+      if (nextLayout === documentLayout) {
+        return;
+      }
+
+      const previousLayout = documentLayout;
+      pendingLayoutPositionRef.current = currentScrollPosition();
+      setDocumentLayout(nextLayout);
+
+      try {
+        await patchSettings((current) => ({
+          ...current,
+          editor: {
+            ...current.editor,
+            layout: nextLayout,
+          },
+        }));
+      } catch (reason) {
+        const failedSettings = settingsRef.current;
+        if (failedSettings) {
+          updateSettings({
+            ...failedSettings,
+            editor: {
+              ...failedSettings.editor,
+              layout: previousLayout,
+            },
+          });
+        }
+        setDocumentLayout(previousLayout);
+        restorePendingLayoutPosition();
+        throw reason;
+      }
+
+      if (nextLayout === "seamless" || mode === "write") {
+        requestAnimationFrame(restorePendingLayoutPosition);
+      }
+    },
+    [
+      currentScrollPosition,
+      documentLayout,
+      mode,
+      patchSettings,
+      restorePendingLayoutPosition,
+      updateSettings,
+    ],
+  );
 
   const rememberReadingPosition = useCallback(
     async (waitForWrite = false) => {
@@ -1465,53 +1528,69 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         {currentChapter ? (
           <article
             aria-label={`${chapterLabel}: ${currentChapter.title}`}
-            className="mx-auto w-full max-w-[68ch]"
+            className={cn(
+              "mx-auto w-full",
+              mode === "read" && documentLayout === "pages" ? "max-w-none" : "max-w-[68ch]",
+            )}
             ref={articleRef}
           >
-            <header className={cn(mode === "read" ? "mb-10" : "mb-5")}>
-              <p className="text-xs font-semibold tracking-[0.24em] text-muted-foreground uppercase">
-                {chapterLabel}
-              </p>
-              {mode === "read" ? (
-                <h1 className="manuscript-reader mt-5 font-serif text-4xl leading-tight font-medium tracking-[-0.035em] sm:text-5xl">
-                  {currentChapter.title}
-                </h1>
-              ) : null}
-            </header>
-
             <div
               className="animate-in fade-in duration-150 motion-reduce:animate-none motion-reduce:duration-0"
-              key={mode}
+              key={`${mode}-${documentLayout}`}
             >
-              {mode === "read" ? (
-                draft.trim() ? (
-                  <div className="manuscript-reader font-serif text-[1.12rem] leading-[1.82] sm:text-[1.2rem]">
-                    <MarkdownManuscript source={withoutLeadingMarkdownTitle(draft)} />
-                  </div>
-                ) : (
-                  <EmptyManuscript />
-                )
-              ) : (
-                <textarea
-                  aria-label={`Markdown source for ${currentChapter.title}`}
-                  className="manuscript-editor field-sizing-content min-h-[62vh] w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-mono text-base leading-[1.75] text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none sm:text-[1.05rem]"
-                  onBlur={handleEditorBlur}
-                  onChange={changeDraft}
-                  onClick={handleEditorSelection}
-                  onKeyUp={rememberCaretFromKeyboard}
-                  onSelect={handleEditorSelection}
-                  placeholder="# Begin this chapter…"
-                  ref={textareaRef}
-                  spellCheck
-                  value={draft}
+              {mode === "read" && documentLayout === "pages" ? (
+                <PagedManuscript
+                  chapterLabel={chapterLabel}
+                  onPaginated={restorePendingLayoutPosition}
+                  source={withoutLeadingMarkdownTitle(draft)}
+                  title={currentChapter.title}
                 />
+              ) : (
+                <>
+                  <header className={cn(mode === "read" ? "mb-10" : "mb-5")}>
+                    <p className="text-xs font-semibold tracking-[0.24em] text-muted-foreground uppercase">
+                      {chapterLabel}
+                    </p>
+                    {mode === "read" ? (
+                      <h1 className="manuscript-reader mt-5 font-serif text-4xl leading-tight font-medium tracking-[-0.035em] sm:text-5xl">
+                        {currentChapter.title}
+                      </h1>
+                    ) : null}
+                  </header>
+                  {mode === "read" ? (
+                    draft.trim() ? (
+                      <div className="manuscript-reader font-serif text-[1.12rem] leading-[1.82] sm:text-[1.2rem]">
+                        <MarkdownManuscript source={withoutLeadingMarkdownTitle(draft)} />
+                      </div>
+                    ) : (
+                      <EmptyManuscript />
+                    )
+                  ) : (
+                    <textarea
+                      aria-label={`Markdown source for ${currentChapter.title}`}
+                      className="manuscript-editor field-sizing-content min-h-[62vh] w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-mono text-base leading-[1.75] text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none sm:text-[1.05rem]"
+                      onBlur={handleEditorBlur}
+                      onChange={changeDraft}
+                      onClick={handleEditorSelection}
+                      onKeyUp={rememberCaretFromKeyboard}
+                      onSelect={handleEditorSelection}
+                      placeholder="# Begin this chapter…"
+                      ref={textareaRef}
+                      spellCheck
+                      value={draft}
+                    />
+                  )}
+                </>
               )}
             </div>
 
             {mode === "read" && !focusMode && (previousChapter || nextChapter) ? (
               <nav
                 aria-label="Chapter navigation"
-                className="mt-20 flex items-center justify-between gap-4 border-t border-border pt-6"
+                className={cn(
+                  "mt-20 flex items-center justify-between gap-4 border-t border-border pt-6",
+                  documentLayout === "pages" && "mx-auto max-w-[51rem]",
+                )}
               >
                 <Button
                   disabled={!previousChapter}
@@ -1552,7 +1631,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         />
       ) : null}
 
-      {currentChapter && mode === "read" && !focusMode ? (
+      {currentChapter && mode === "read" && documentLayout === "seamless" && !focusMode ? (
         <ChapterProgressRail inspectorOpen={inspectorOpen} targetRef={articleRef} />
       ) : null}
 
@@ -1562,6 +1641,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           bookId={book.id}
           chapters={chapters}
           currentChapterId={currentChapter.id}
+          documentLayout={documentLayout}
           draft={draft}
           inspectorOpen={inspectorOpen}
           mode={mode}
@@ -1573,6 +1653,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
             }
           }}
           onChapterUpdated={updateChapterFromTool}
+          onDocumentLayoutChange={changeDocumentLayout}
           onRequestWrite={() => void switchMode("write", true)}
           onRestoreEditorFocus={restoreEditorFocus}
           onToolDirtyChange={handleToolDirtyChange}

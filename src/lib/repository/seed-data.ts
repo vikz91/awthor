@@ -300,6 +300,7 @@ export function createSeedRepositoryData(now = seededAt): RepositoryData {
         [saltLines.id]: { dialect: "british", words: ["Aster", "Mara", "tideline"] },
       },
       editor: {
+        layout: "seamless",
         fontFamily: "serif",
         fontSize: 18,
         lineHeight: 1.75,

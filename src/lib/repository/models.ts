@@ -83,6 +83,10 @@ export function createDefaultBookProofreadingSettings(
   return bookProofreadingSettingsSchema.parse({ dialect });
 }
 
+export const documentLayouts = ["seamless", "pages"] as const;
+export const documentLayoutSchema = z.enum(documentLayouts);
+export type DocumentLayout = z.infer<typeof documentLayoutSchema>;
+
 const backupReminderSchema = z.preprocess(
   (value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -110,6 +114,7 @@ export const appSettingsSchema = z.object({
   proofreadingByBook: z.record(z.string(), bookProofreadingSettingsSchema).default({}),
   editor: z
     .object({
+      layout: documentLayoutSchema.default("seamless"),
       fontFamily: z.string().default("serif"),
       fontSize: z.number().positive().default(18),
       lineHeight: z.number().positive().default(1.75),
@@ -117,6 +122,7 @@ export const appSettingsSchema = z.object({
       spellcheck: z.boolean().default(true),
     })
     .default({
+      layout: "seamless",
       fontFamily: "serif",
       fontSize: 18,
       lineHeight: 1.75,

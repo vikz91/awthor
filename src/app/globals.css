@@ -161,6 +161,92 @@
   font-variant-ligatures: none;
 }
 
+.manuscript-page-stack {
+  --manuscript-page-width: min(51rem, 100%);
+  --manuscript-page-padding-block: clamp(2rem, 11%, 5.75rem);
+  --manuscript-page-padding-inline: clamp(1.5rem, 10%, 5.25rem);
+  position: relative;
+  width: 100%;
+}
+
+.manuscript-page-list {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2rem);
+}
+
+.manuscript-page,
+.manuscript-pagination-measure {
+  position: relative;
+  width: var(--manuscript-page-width);
+  aspect-ratio: 17 / 22;
+}
+
+.manuscript-page {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 1.25rem 3.5rem color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+
+.manuscript-page-content {
+  position: absolute;
+  inset: var(--manuscript-page-padding-block) var(--manuscript-page-padding-inline);
+  overflow: hidden;
+}
+
+.manuscript-page-flow {
+  color: var(--card-foreground);
+  font-family: var(--font-newsreader);
+  font-size: 1.12rem;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  line-height: 1.82;
+}
+
+.manuscript-page-flow > :first-child {
+  margin-top: 0;
+}
+
+.manuscript-page-flow > :last-child {
+  margin-bottom: 0;
+}
+
+.manuscript-page-number {
+  position: absolute;
+  right: 0;
+  bottom: clamp(0.65rem, 2.5%, 1.35rem);
+  left: 0;
+  color: var(--muted-foreground);
+  font-family: var(--font-nunito);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.manuscript-pagination-measure {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: -1;
+  pointer-events: none;
+  transform: translateX(-50%);
+  visibility: hidden;
+}
+
+.manuscript-pagination-measure .manuscript-page-content {
+  overflow: visible;
+}
+
+@media (min-width: 40rem) {
+  .manuscript-page-flow {
+    font-size: 1.2rem;
+  }
+}
+
 .book-print-export {
   display: none;
 }

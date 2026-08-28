@@ -103,15 +103,15 @@ export function ChapterChooser({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-h-[min(46rem,calc(100dvh-2rem))] gap-4 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b border-border px-5 pt-5 pb-4 sm:px-6">
+      <DialogContent className="flex h-[min(46rem,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] flex-col gap-4 overflow-hidden p-0 sm:h-[min(46rem,calc(100dvh-2rem))] sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b border-border px-5 pt-5 pb-4 sm:px-6">
           <DialogTitle className="text-xl">Chapters</DialogTitle>
           <DialogDescription>
             Choose a chapter or keep the manuscript structure tidy without leaving this book.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 sm:px-6">
+        <div className="shrink-0 px-5 sm:px-6">
           <label className="relative block" htmlFor="chapter-search">
             <span className="sr-only">Search chapters</span>
             <Search
@@ -128,7 +128,7 @@ export function ChapterChooser({
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 sm:px-4">
+        <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 [scrollbar-gutter:stable] sm:px-4">
           {filteredChapters.length === 0 ? (
             <p className="px-3 py-12 text-center text-sm text-muted-foreground">
               No chapters match “{query}”.
@@ -262,7 +262,7 @@ export function ChapterChooser({
         {confirmingChapter ? (
           <section
             aria-label="Confirm chapter deletion"
-            className="mx-5 rounded-2xl border border-destructive/30 bg-destructive/8 p-4 sm:mx-6"
+            className="mx-5 shrink-0 rounded-2xl border border-destructive/30 bg-destructive/8 p-4 sm:mx-6"
           >
             <p className="font-medium">Delete “{confirmingChapter.title}”?</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -290,12 +290,12 @@ export function ChapterChooser({
         ) : null}
 
         {error ? (
-          <p aria-live="polite" className="px-5 text-sm text-destructive sm:px-6">
+          <p aria-live="polite" className="shrink-0 px-5 text-sm text-destructive sm:px-6">
             {error}
           </p>
         ) : null}
 
-        <DialogFooter className="border-t border-border px-5 py-4 sm:px-6">
+        <DialogFooter className="shrink-0 border-t border-border px-5 py-4 sm:px-6">
           <Button
             disabled={busyAction !== null}
             onClick={() => void run("add", onAdd)}

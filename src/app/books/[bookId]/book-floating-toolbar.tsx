@@ -9,6 +9,7 @@ import { countManuscript } from "@/lib/markdown";
 import type {
   BookProofreadingSettings,
   Chapter,
+  DocumentLayout,
   WorkspaceMode,
   WorkspaceTool,
 } from "@/lib/repository";
@@ -25,6 +26,7 @@ type BookFloatingToolbarProps = {
   bookId: string;
   chapters: readonly Chapter[];
   currentChapterId: string;
+  documentLayout: DocumentLayout;
   draft: string;
   inspectorOpen: boolean;
   mode: WorkspaceMode;
@@ -33,6 +35,7 @@ type BookFloatingToolbarProps = {
   onApplyDraft: (markdown: string) => void;
   onRequestWrite: () => void;
   onChapterUpdated: (chapter: Chapter) => void;
+  onDocumentLayoutChange: (layout: DocumentLayout) => Promise<void>;
   onBeforeToolOpen: () => Promise<void>;
   onProofreadingPreferencesChange: (preferences: BookProofreadingSettings) => Promise<void>;
   onToolDirtyChange: (tool: Exclude<WorkspaceTool, null>, dirty: boolean) => void;
@@ -45,6 +48,7 @@ export function BookFloatingToolbar({
   bookId,
   chapters,
   currentChapterId,
+  documentLayout,
   draft,
   inspectorOpen,
   mode,
@@ -52,6 +56,7 @@ export function BookFloatingToolbar({
   onApplyDraft,
   onBeforeToolOpen,
   onChapterUpdated,
+  onDocumentLayoutChange,
   onProofreadingPreferencesChange,
   onRequestWrite,
   onRestoreEditorFocus,
@@ -60,6 +65,7 @@ export function BookFloatingToolbar({
 }: BookFloatingToolbarProps) {
   const [announcement, setAnnouncement] = useState("Book tools ready.");
   const [openingTool, setOpeningTool] = useState<WorkspaceTool>(null);
+  const [savingLayout, setSavingLayout] = useState(false);
   const [showCounts, setShowCounts] = useState(false);
   const previousToolRef = useRef<WorkspaceTool>(activeTool);
   const counts = useMemo(() => countManuscript(draft), [draft]);
@@ -122,6 +128,24 @@ export function BookFloatingToolbar({
     });
   }
 
+  async function toggleDocumentLayout() {
+    const nextLayout: DocumentLayout = documentLayout === "pages" ? "seamless" : "pages";
+    setSavingLayout(true);
+    setAnnouncement(`Switching to ${nextLayout} layout…`);
+    try {
+      await onDocumentLayoutChange(nextLayout);
+      setAnnouncement(
+        nextLayout === "pages" && mode === "write"
+          ? "Page layout selected. Switch to Read to preview pages."
+          : `${nextLayout === "pages" ? "Page" : "Seamless"} layout selected.`,
+      );
+    } catch {
+      setAnnouncement("The document layout preference could not be saved on this device.");
+    } finally {
+      setSavingLayout(false);
+    }
+  }
+
   const items: FloatingToolbarItem[] = [
     {
       id: "spelling",
@@ -165,6 +189,21 @@ export function BookFloatingToolbar({
       pressed: showCounts,
       shortcut: "Alt+4",
       tooltip: showCounts ? "Hide word and character count" : "Show word and character count",
+    },
+    {
+      id: "layout",
+      label: documentLayout === "pages" ? "Use seamless layout" : "Use page layout",
+      displayLabel: documentLayout === "pages" ? "Pages" : "Seamless",
+      icon: documentLayout === "pages" ? "Files" : "Rows3",
+      onSelect: () => void toggleDocumentLayout(),
+      pressed: documentLayout === "pages",
+      shortcut: "Alt+5",
+      dividerBefore: true,
+      disabled: savingLayout,
+      tooltip:
+        documentLayout === "pages"
+          ? "Switch to uninterrupted scrolling"
+          : "Preview print-like pages in Read",
     },
   ];
 
