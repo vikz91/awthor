@@ -37,8 +37,27 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
 });
 
+function parseMetadataBase(value: string | undefined) {
+  const origin = value?.trim();
+  if (!origin) {
+    return null;
+  }
+
+  try {
+    return new URL(origin.includes("://") ? origin : `https://${origin}`);
+  } catch {
+    return null;
+  }
+}
+
+const metadataBase =
+  parseMetadataBase(process.env.NEXT_PUBLIC_SITE_URL) ??
+  parseMetadataBase(process.env.VERCEL_PROJECT_PRODUCTION_URL) ??
+  parseMetadataBase(process.env.VERCEL_URL) ??
+  new URL("http://localhost:3000");
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase,
   title: {
     default: "Awthor — A quieter place to write your novel",
     template: "%s · Awthor",
