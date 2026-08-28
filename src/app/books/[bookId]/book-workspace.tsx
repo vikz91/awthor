@@ -28,8 +28,10 @@ import {
 import { AppTopBar } from "@/components/app-top-bar";
 import { SettingsInspector } from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
+import type { BookExportSnapshot } from "@/lib/book-export";
 import {
   formatMarkdownSelection,
+  getLeadingMarkdownTitle,
   type MarkdownSelectionFormat,
   withLeadingMarkdownTitle,
   withoutLeadingMarkdownTitle,
@@ -49,6 +51,7 @@ import {
   type WorkspaceTool,
 } from "@/lib/repository";
 import { cn } from "@/lib/utils";
+import { BookExport } from "./book-export";
 import { BookFloatingToolbar } from "./book-floating-toolbar";
 import { ChapterChooser } from "./chapter-chooser";
 import { ChapterProgressRail } from "./chapter-progress-rail";
@@ -130,6 +133,24 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       ? chapters[currentChapterIndex + 1]
       : null;
   const inspectorOpen = !focusMode && (activeTool !== null || settingsOpen);
+  const exportSnapshot = useMemo<BookExportSnapshot | null>(() => {
+    if (!book) {
+      return null;
+    }
+
+    return {
+      book,
+      chapters: chapters.map((chapter) =>
+        chapter.id === currentChapterId
+          ? {
+              ...chapter,
+              body: withoutLeadingMarkdownTitle(draft),
+              title: getLeadingMarkdownTitle(draft) ?? chapter.title,
+            }
+          : chapter,
+      ),
+    };
+  }, [book, chapters, currentChapterId, draft]);
 
   const updateBook = useCallback((nextBook: Book | null) => {
     bookRef.current = nextBook;
@@ -1286,7 +1307,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     );
   }
 
-  if (loadState === "book-missing" || !book) {
+  if (loadState === "book-missing" || !book || !exportSnapshot) {
     return (
       <WorkspaceProblem
         actionLabel="Return to books"
@@ -1403,6 +1424,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                   <span className="hidden xl:inline">Write</span>
                 </Button>
               </div>
+              <BookExport snapshot={exportSnapshot} />
               <Button
                 aria-label="Enter focus mode"
                 disabled={!currentChapter}
@@ -1451,7 +1473,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                 {chapterLabel}
               </p>
               {mode === "read" ? (
-                <h1 className="mt-5 font-heading text-4xl leading-tight font-medium tracking-[-0.04em] sm:text-5xl">
+                <h1 className="manuscript-reader mt-5 font-serif text-4xl leading-tight font-medium tracking-[-0.035em] sm:text-5xl">
                   {currentChapter.title}
                 </h1>
               ) : null}
@@ -1463,7 +1485,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
             >
               {mode === "read" ? (
                 draft.trim() ? (
-                  <div className="font-serif text-[1.12rem] leading-[1.9] sm:text-[1.2rem]">
+                  <div className="manuscript-reader font-serif text-[1.12rem] leading-[1.82] sm:text-[1.2rem]">
                     <MarkdownManuscript source={withoutLeadingMarkdownTitle(draft)} />
                   </div>
                 ) : (
@@ -1472,7 +1494,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
               ) : (
                 <textarea
                   aria-label={`Markdown source for ${currentChapter.title}`}
-                  className="field-sizing-content min-h-[62vh] w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-mono text-base leading-8 text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none sm:text-[1.05rem]"
+                  className="manuscript-editor field-sizing-content min-h-[62vh] w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-mono text-base leading-[1.75] text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none sm:text-[1.05rem]"
                   onBlur={handleEditorBlur}
                   onChange={changeDraft}
                   onClick={handleEditorSelection}

@@ -83,6 +83,26 @@ export function createDefaultBookProofreadingSettings(
   return bookProofreadingSettingsSchema.parse({ dialect });
 }
 
+const backupReminderSchema = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return value;
+    }
+
+    const reminder = value as Record<string, unknown>;
+    return {
+      ...reminder,
+      frequency: "weekly",
+      lastShownAt: reminder.lastShownAt ?? reminder.lastDismissedAt ?? null,
+    };
+  },
+  z.object({
+    enabled: z.boolean().default(true),
+    frequency: z.literal("weekly").default("weekly"),
+    lastShownAt: z.string().nullable().default(null),
+  }),
+);
+
 export const appSettingsSchema = z.object({
   activeBookId: z.string().nullable().default(null),
   lastChapterByBook: z.record(z.string(), z.string()).default({}),
@@ -103,13 +123,11 @@ export const appSettingsSchema = z.object({
       focusMode: false,
       spellcheck: true,
     }),
-  backupReminder: z
-    .object({
-      enabled: z.boolean().default(true),
-      frequency: z.enum(["daily", "weekly", "monthly"]).default("weekly"),
-      lastDismissedAt: z.string().nullable().default(null),
-    })
-    .default({ enabled: true, frequency: "weekly", lastDismissedAt: null }),
+  backupReminder: backupReminderSchema.default({
+    enabled: true,
+    frequency: "weekly",
+    lastShownAt: null,
+  }),
 });
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 

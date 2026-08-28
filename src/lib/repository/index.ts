@@ -1,5 +1,5 @@
 import type { AwthorRepository } from "./contract";
-import { createLocalAwthorRepository } from "./local-repository";
+import { createIndexedDbAwthorRepository } from "./indexeddb-repository";
 
 let repository: AwthorRepository | undefined;
 
@@ -10,11 +10,17 @@ let repository: AwthorRepository | undefined;
  * components continue to depend only on AwthorRepository.
  */
 export function getAwthorRepository(): AwthorRepository {
-  repository ??= createLocalAwthorRepository();
+  repository ??= createIndexedDbAwthorRepository();
   return repository;
 }
 
 export * from "./contract";
+export {
+  createIndexedDbAwthorRepository,
+  indexedDbDatabaseName,
+  indexedDbRepositoryPrefix,
+  indexedDbRepositorySchemaVersion,
+} from "./indexeddb-repository";
 export {
   legacyRepositoryPrefix,
   RepositoryStorageError,
@@ -24,5 +30,11 @@ export {
 } from "./local-repository";
 export * from "./manuscript-autosave";
 export * from "./models";
-export { createSeedRepositoryData, seedRepositorySummary } from "./seed-data";
+export {
+  createSeedRepositoryData,
+  hasSeedRepositoryData,
+  seedRepositoryBookIds,
+  seedRepositorySummary,
+  unseedRepositoryData,
+} from "./seed-data";
 export { themeBootstrapScript } from "./theme-bootstrap";

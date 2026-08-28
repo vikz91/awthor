@@ -17,7 +17,8 @@
 
 Awthor is a deliberately minimal writing workspace. The hosted application does not store
 manuscripts in an Awthor server database: books, chapters, characters, settings, and reading
-positions remain in the current browser through a repository-backed local storage layer.
+positions remain in the current browser. IndexedDB stores book-domain records while localStorage
+is limited to small bootstrap and global-preference values.
 
 There is no pricing tier. Awthor is completely free and distributed under the
 [GNU Affero General Public License v3.0](LICENSE).
@@ -53,6 +54,11 @@ preferences are respected.
 In Write mode, selecting text opens a compact contextual formatter above the selection. Bold,
 italic, strikethrough, and line-aware quote actions edit the Markdown source directly, preserve the
 selection, and follow the normal local autosave path. No permanent formatting toolbar is shown.
+
+The top-bar Export menu works on the complete book. **Copy Markdown** combines the title matter,
+optional preface, and every chapter into one clipboard-ready Markdown manuscript. **Export as PDF**
+opens the browser's local print dialog with a dedicated light, paginated book layout; choose Save as
+PDF to create the file. Export content is assembled entirely in the browser and is never uploaded.
 
 The Focus icon beside Read/Write enters a temporary distraction-free workspace. Awthor requests
 browser fullscreen when available and falls back to an in-page full-viewport layout when it is not;
@@ -94,12 +100,16 @@ Every shortcut has a visible control.
 ## Local-first data and privacy
 
 `AwthorRepository` is the only product data boundary; pages and components never access browser
-storage directly. Storage schema v2 contains books, Markdown chapters, characters, author settings,
-Paper/Stone theme choice, and per-book reading state. Import/export uses a portable v2 JSON backup.
+storage directly. Storage schema v3 keeps each book, chapter, and character as an IndexedDB record;
+book-scoped reading and proofreading settings live there as well. Author details, global editor
+preferences, and the Paper/Stone bootstrap stay in localStorage. `/test` exports those logical
+stores together as an unencrypted `.awthor.zip` archive; supported v1 and v2 JSON backups remain
+importable for backwards compatibility.
 
-A safe v1 migration preserves supported books, chapters, characters, profile, theme, and settings.
-Legacy Notes and Plot records are intentionally discarded only after all v2 writes succeed. If a
-migration fails, the v1 records remain untouched and the interface offers Retry.
+A safe migration preserves supported v1/v2 books, chapters, characters, profile, theme, and
+settings, and deletes the large localStorage collections only after IndexedDB commits successfully.
+Legacy Notes and Plot records are intentionally discarded. If migration fails, the previous
+browser records remain available and the interface offers Retry.
 
 Harper proofreading loads only when requested and runs inside the browser. Author settings define
 the default American, British, Australian, Canadian, or Indian English dialect; books inherit that
@@ -139,6 +149,7 @@ states so both themes retain the same layout and accessible interaction states.
 | Markdown | [`react-markdown`](https://github.com/remarkjs/react-markdown) + [`remark-gfm`](https://github.com/remarkjs/remark-gfm) | Safe Markdown and GFM rendering without raw HTML |
 | Proofreading | [Harper.js](https://writewithharper.com/) | Lazy, worker-backed, on-device writing feedback |
 | Validation | [Zod 4](https://zod.dev/) | Runtime validation and backup/migration parsing |
+| Backup archives | [`fflate`](https://github.com/101arrowz/fflate) | Client-only ZIP creation and extraction for portable local backups |
 | Icons | [Lucide React](https://lucide.dev/) + [Motion Icons](https://www.npmjs.com/package/motion-icons-react) | Interface iconography |
 | Class composition | [CVA](https://cva.style/), `clsx`, and `tailwind-merge` | Reusable variants and conflict-safe classes |
 | Compiler | [React Compiler](https://react.dev/learn/react-compiler) | Automatic component optimization |
@@ -192,16 +203,17 @@ src/
 ├── app/
 │   ├── books/[bookId]/       # Unified Read/Write workspace and tool composition
 │   ├── books/                # Repository-backed local library
-│   ├── test/                 # Repository diagnostics and v2 fixture controls
+│   ├── test/                 # Repository diagnostics, storage migration, and backup controls
 │   ├── globals.css           # Paper/Stone semantic tokens
 │   └── page.tsx              # Landing screen
 ├── components/
 │   ├── book-tools/           # Spell check, Characters, and Chapter arc drawers
 │   └── ui/floating-toolbar.tsx
 └── lib/
+    ├── backup/               # ZIP archive creation, validation, and legacy backup detection
     ├── markdown/             # Counting and URL-safety helpers
     ├── proofreading/         # Engine-neutral service plus Harper adapter
-    └── repository/           # Product data contract, v2 storage, migration, autosave, seed
+    └── repository/           # Product contract, IndexedDB v3, migration, autosave, and seed data
 ```
 
 `next.config.ts` owns legacy redirects, `biome.json` owns formatting and lint rules,

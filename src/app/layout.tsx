@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Nunito_Sans, Outfit } from "next/font/google";
+import { Geist_Mono, Newsreader, Nunito_Sans, Outfit } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { BackupReminder } from "@/components/backup-reminder";
 import { ThemeProvider } from "@/components/theme-provider";
 import { themeBootstrapScript } from "@/lib/repository";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,13 @@ const nunitoSans = Nunito_Sans({
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+});
+
+const newsreader = Newsreader({
+  axes: ["opsz"],
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-newsreader",
 });
 
 function parseMetadataBase(value: string | undefined) {
@@ -82,6 +90,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         nunitoSans.variable,
         outfitHeading.variable,
         geistMono.variable,
+        newsreader.variable,
       )}
     >
       <head>
@@ -90,7 +99,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </Script>
       </head>
       <body className="flex min-h-full flex-col">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          <BackupReminder />
+        </ThemeProvider>
       </body>
     </html>
   );

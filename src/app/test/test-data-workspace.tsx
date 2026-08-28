@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Database,
   Download,
+  FileArchive,
   FileJson,
   HardDrive,
   RefreshCw,
@@ -18,14 +19,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { backupArchiveFilename, createBackupArchive, parseBackupFile } from "@/lib/backup/archive";
 import {
   type AwthorBackupV2,
   awthorBackupFormat,
   awthorBackupVersion,
   createSeedRepositoryData,
   getAwthorRepository,
+  hasSeedRepositoryData,
   type RepositoryData,
+  seedRepositoryBookIds,
   seedRepositorySummary,
+  unseedRepositoryData,
 } from "@/lib/repository";
 
 type Inventory = {
@@ -34,6 +39,7 @@ type Inventory = {
   characters: number;
   bytes: number;
   hasData: boolean;
+  hasSeedData: boolean;
 };
 
 type Notice = {
@@ -47,6 +53,7 @@ const emptyInventory: Inventory = {
   characters: 0,
   bytes: 0,
   hasData: false,
+  hasSeedData: false,
 };
 const seedPreviewBackup: AwthorBackupV2 = {
   format: awthorBackupFormat,
@@ -68,6 +75,7 @@ function inventoryFrom(data: RepositoryData): Inventory {
     ),
     bytes: new Blob([serialized]).size,
     hasData: data.profile !== null || data.books.length > 0,
+    hasSeedData: hasSeedRepositoryData(data),
   };
 }
 
@@ -83,13 +91,13 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-function downloadBackup(backup: AwthorBackupV2) {
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+function downloadBackup(archive: Uint8Array, exportedAt: string) {
+  const blob = new Blob([Uint8Array.from(archive).buffer], { type: "application/zip" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
 
   anchor.href = url;
-  anchor.download = `awthor-backup-${backup.exportedAt.slice(0, 10)}.json`;
+  anchor.download = backupArchiveFilename(exportedAt);
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -106,6 +114,7 @@ export function TestDataWorkspace() {
     text: "Reading this browser's Awthor repository…",
   });
   const [isReady, setIsReady] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [canRetryMigration, setCanRetryMigration] = useState(false);
 
@@ -121,7 +130,7 @@ export function TestDataWorkspace() {
         setCanRetryMigration(true);
         setNotice({
           tone: "error",
-          text: "The schema-v2 migration could not finish. Legacy data was left untouched.",
+          text: "The IndexedDB migration could not finish. Previous browser data was left untouched.",
         });
         return;
       }
@@ -137,7 +146,7 @@ export function TestDataWorkspace() {
         text:
           message ??
           (nextInventory.hasData
-            ? "Awthor schema-v2 data is available in this browser."
+            ? "Awthor IndexedDB data is available in this browser."
             : "No Awthor books or author profile are currently stored."),
       });
     } catch (error) {
@@ -160,16 +169,14 @@ export function TestDataWorkspace() {
   async function seedData() {
     if (
       inventory.hasData &&
-      !window.confirm("Replace all existing Awthor data with the schema-v2 demo workspace?")
+      !window.confirm("Replace all existing Awthor data with the demo workspace?")
     ) {
       return;
     }
 
     try {
       await getAwthorRepository().replaceData(createSeedRepositoryData(new Date().toISOString()));
-      await refreshInventory(
-        "Seeded one Markdown book with three chapters, one character, and chapter arcs.",
-      );
+      await refreshInventory("Seeded two fully populated Markdown books with three chapters each.");
     } catch (error) {
       setNotice({
         tone: "error",
@@ -178,38 +185,57 @@ export function TestDataWorkspace() {
     }
   }
 
-  async function clearData() {
-    if (
-      !window.confirm(
-        "Clear all Awthor data from this browser? Export a backup first if you may need it later.",
-      )
-    ) {
-      return;
-    }
-
+  async function unseedData() {
     try {
-      await getAwthorRepository().clearAll();
-      await refreshInventory("All Awthor local data was removed from this browser.");
+      const repository = getAwthorRepository();
+      const data = await repository.getData();
+      const seedBookIds = new Set<string>(seedRepositoryBookIds);
+      const seededBookCount = data.books.filter((book) => seedBookIds.has(book.id)).length;
+
+      if (seededBookCount === 0) {
+        await refreshInventory("No seeded books were found in this browser.");
+        return;
+      }
+
+      if (
+        !window.confirm(
+          `Remove ${seededBookCount} seeded book${seededBookCount === 1 ? "" : "s"} from this browser?`,
+        )
+      ) {
+        return;
+      }
+
+      const removedCount = await unseedRepositoryData(repository);
+      await refreshInventory(
+        `Removed ${removedCount} seeded book${removedCount === 1 ? "" : "s"} from this browser.`,
+      );
     } catch (error) {
       setNotice({
         tone: "error",
-        text: error instanceof Error ? error.message : "Awthor local data could not be cleared.",
+        text: error instanceof Error ? error.message : "The seeded books could not be removed.",
       });
     }
   }
 
   async function exportData() {
+    setIsExporting(true);
+
     try {
       const backup = await getAwthorRepository().exportBackup();
-      downloadBackup(backup);
+      downloadBackup(createBackupArchive(backup), backup.exportedAt);
       setPreview(JSON.stringify(backup, null, 2));
-      setPreviewLabel("Last exported v2 backup");
-      setNotice({ tone: "success", text: "Downloaded a portable schema-v2 JSON backup." });
+      setPreviewLabel("Last exported ZIP contents");
+      setNotice({
+        tone: "success",
+        text: "Downloaded an unencrypted Awthor ZIP backup.",
+      });
     } catch (error) {
       setNotice({
         tone: "error",
-        text: error instanceof Error ? error.message : "The JSON backup could not be created.",
+        text: error instanceof Error ? error.message : "The ZIP backup could not be created.",
       });
+    } finally {
+      setIsExporting(false);
     }
   }
 
@@ -217,25 +243,29 @@ export function TestDataWorkspace() {
     setIsImporting(true);
 
     try {
-      if (file.size > 10 * 1024 * 1024) {
-        throw new Error("Backup files must be smaller than 10 MB.");
-      }
+      const parsed = parseBackupFile(new Uint8Array(await file.arrayBuffer()));
+      const contents = parsed.summary
+        ? `${parsed.summary.books} book${parsed.summary.books === 1 ? "" : "s"}, ${parsed.summary.chapters} chapter${parsed.summary.chapters === 1 ? "" : "s"}, and ${parsed.summary.characters} character${parsed.summary.characters === 1 ? "" : "s"}`
+        : "a legacy Awthor workspace";
 
       if (
         inventory.hasData &&
-        !window.confirm("Replace all current Awthor data with the selected backup?")
+        !window.confirm(`Replace all current Awthor data with ${contents} from ${file.name}?`)
       ) {
         return;
       }
 
-      const parsed: unknown = JSON.parse(await file.text());
-      const result = await getAwthorRepository().importBackup(parsed);
+      const result = await getAwthorRepository().importBackup(parsed.backup);
       const discarded = result.discarded.notes + result.discarded.plots;
       const migrationMessage =
         result.importedVersion === 1
-          ? ` Imported the v1 backup into v2; ${discarded} legacy Notes/Plots record${discarded === 1 ? " was" : "s were"} discarded.`
+          ? ` Imported the v1 backup into current storage; ${discarded} legacy Notes/Plots record${discarded === 1 ? " was" : "s were"} discarded.`
           : " Imported the schema-v2 backup.";
       await refreshInventory(`${file.name} restored.${migrationMessage}`);
+      setPreview(JSON.stringify(parsed.backup, null, 2));
+      setPreviewLabel(
+        parsed.kind === "archive" ? "Last imported ZIP contents" : "Last imported JSON backup",
+      );
     } catch (error) {
       setNotice({
         tone: "error",
@@ -285,8 +315,8 @@ export function TestDataWorkspace() {
               Local data lab
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-              Seed the v2 repository, inspect its portable backup, or verify import and migration
-              behavior without bypassing Awthor&apos;s data boundary.
+              Seed the IndexedDB repository, inspect its portable backup, or verify import and
+              migration behavior without bypassing Awthor&apos;s data boundary.
             </p>
           </div>
 
@@ -330,9 +360,9 @@ export function TestDataWorkspace() {
           className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
         >
           <ActionCard
-            description="Replace the repository with a Markdown manuscript, character, and chapter arcs."
+            description="Replace the repository with two complete books, six Markdown chapters, characters, and chapter arcs."
             icon={Database}
-            title="Seed v2 data"
+            title="Seed local data"
           >
             <Button
               className="w-full"
@@ -346,47 +376,47 @@ export function TestDataWorkspace() {
           </ActionCard>
 
           <ActionCard
-            description="Remove all product data through the repository's scoped cleanup operation."
+            description="Remove only the known fixture books; unrelated books are preserved."
             icon={Trash2}
-            title="Clear"
+            title="Unseed local data"
           >
             <Button
               className="w-full"
-              disabled={!isReady || !inventory.hasData}
-              onClick={() => void clearData()}
+              disabled={!isReady || !inventory.hasSeedData}
+              onClick={() => void unseedData()}
               size="lg"
               variant="destructive"
             >
               <Trash2 aria-hidden="true" />
-              Clear Awthor data
+              Remove seed data
             </Button>
           </ActionCard>
 
           <ActionCard
-            description="Download the canonical v2 backup produced by AwthorRepository."
-            icon={Download}
+            description="ZIP the IndexedDB and app settings snapshots locally. The archive is not encrypted."
+            icon={FileArchive}
             title="Export"
           >
             <Button
               className="w-full"
-              disabled={!isReady}
+              disabled={!isReady || isExporting}
               onClick={() => void exportData()}
               size="lg"
               variant="outline"
             >
               <Download aria-hidden="true" />
-              Export JSON
+              {isExporting ? "Creating ZIP…" : "Export ZIP"}
             </Button>
           </ActionCard>
 
           <ActionCard
-            description="Restore v2 backups, or migrate supported v1 records with a discard report."
+            description="Restore Awthor ZIP archives, or import supported legacy JSON backups."
             icon={Upload}
             title="Import"
           >
             <input
-              accept="application/json,.json"
-              aria-label="Choose an Awthor JSON backup"
+              accept="application/zip,.zip,.awthor.zip,application/json,.json"
+              aria-label="Choose an Awthor ZIP or JSON backup"
               className="sr-only"
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -415,7 +445,7 @@ export function TestDataWorkspace() {
             <CardHeader>
               <CardTitle className="text-xl">Seed contents</CardTitle>
               <CardDescription>
-                A focused fixture for the four-screen library and writing workspace.
+                Two complete fixtures for the library, reader, writer, and in-place tools.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -430,10 +460,10 @@ export function TestDataWorkspace() {
                 ))}
               </dl>
               <div className="mt-4 rounded-xl border border-border bg-background/70 p-4 text-xs leading-5 text-muted-foreground">
-                <p className="font-bold text-foreground">Included v2 data</p>
+                <p className="font-bold text-foreground">Included data</p>
                 <p className="mt-1">
-                  Author settings, Paper theme, Markdown chapters, reading positions, a character
-                  dossier, and per-chapter stage and tension arcs.
+                  Complete book metadata, remote covers, six Markdown chapters, four character
+                  dossiers, reading positions, proofreading preferences, and chapter arcs.
                 </p>
               </div>
             </CardContent>
@@ -477,8 +507,9 @@ export function TestDataWorkspace() {
         </section>
 
         <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
-          This page never sends data to a server. Imported files are read in the browser and passed
-          through AwthorRepository before being stored on this device.
+          This page never sends data to a server. Backups are not encrypted, so anyone with the ZIP
+          can read the manuscript and author details. Imports are validated and passed through
+          AwthorRepository before being stored on this device.
         </p>
       </div>
     </main>

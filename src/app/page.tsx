@@ -4,13 +4,13 @@ import {
   Check,
   Code2,
   ExternalLink,
-  Feather,
   Focus,
   HardDrive,
   MoonStar,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 
@@ -55,6 +55,9 @@ export default function Home() {
             <a className="transition-colors hover:text-foreground" href="#features">
               Features
             </a>
+            <a className="transition-colors hover:text-foreground" href="#workspace">
+              See Awthor
+            </a>
             <a className="transition-colors hover:text-foreground" href="#how-it-works">
               How it works
             </a>
@@ -98,8 +101,8 @@ export default function Home() {
                 Your story deserves a quieter place.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl">
-                Awthor gives novelists a beautifully simple space to plan, write, and finish their
-                books—one good writing day at a time.
+                Read, write, and shape your novel in one local-first workspace. Your manuscript
+                stays on your device while the tools you need remain one gesture away.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -135,71 +138,24 @@ export default function Home() {
                 aria-hidden="true"
                 className="absolute -inset-5 -z-10 rotate-2 rounded-[2.2rem] bg-primary/10"
               />
-              <div className="overflow-hidden rounded-[1.7rem] border border-border bg-card shadow-2xl shadow-foreground/10">
-                <div className="flex items-center justify-between border-b border-border bg-card/70 px-5 py-4">
-                  <div className="flex items-center gap-2">
-                    <span className="size-2.5 rounded-full bg-primary" />
-                    <span className="size-2.5 rounded-full bg-secondary" />
-                    <span className="size-2.5 rounded-full bg-foreground" />
-                  </div>
-                  <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Saved on this device
+              <figure className="overflow-hidden rounded-[1.7rem] border border-border bg-card shadow-2xl shadow-foreground/10">
+                <Image
+                  alt="Awthor in Stone theme showing a novel chapter beside the Characters story bible"
+                  className="h-auto w-full"
+                  height={1024}
+                  priority
+                  sizes="(min-width: 1024px) 56vw, 100vw"
+                  src="/screenshots/awthor-story-workspace.jpg"
+                  width={1536}
+                />
+                <figcaption className="flex items-center justify-between gap-4 border-t border-border bg-card px-5 py-4 text-xs font-semibold text-muted-foreground">
+                  <span>Read mode · Characters open in place</span>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-foreground">
+                    <HardDrive aria-hidden="true" className="size-3.5" />
+                    Saved locally
                   </span>
-                </div>
-
-                <div className="grid min-h-[430px] grid-cols-[132px_1fr] sm:grid-cols-[180px_1fr]">
-                  <aside className="border-r border-border bg-muted/50 p-4 sm:p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                      The Long Way Home
-                    </p>
-                    <div className="mt-5 space-y-1.5 text-xs font-semibold text-muted-foreground">
-                      <div className="rounded-lg px-2.5 py-2">01 · The Letter</div>
-                      <div className="rounded-lg bg-primary/10 px-2.5 py-2 text-primary">
-                        02 · Northbound
-                      </div>
-                      <div className="rounded-lg px-2.5 py-2">03 · A Familiar Face</div>
-                      <div className="rounded-lg px-2.5 py-2">04 · The Crossing</div>
-                    </div>
-                  </aside>
-
-                  <article className="px-6 py-8 sm:px-10 sm:py-10">
-                    <div className="mb-8 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
-                      <span>Chapter two</span>
-                      <span>1,247 words</span>
-                    </div>
-                    <h2 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-                      Northbound
-                    </h2>
-                    <div className="mt-7 space-y-5 font-serif text-[15px] leading-7 text-foreground/80 sm:text-base">
-                      <p>
-                        The train slipped out of the city before Mara could decide whether leaving
-                        counted as courage or surrender.
-                      </p>
-                      <p>
-                        Beyond the glass, morning gathered over the fields in pale ribbons. She
-                        opened the letter once more, though by now she knew every word.
-                      </p>
-                      <p className="text-muted-foreground">
-                        At the bottom of the page, her mother&apos;s handwriting leaned gently
-                        toward the margin...
-                        <span className="ml-0.5 inline-block h-5 w-px translate-y-1 bg-primary" />
-                      </p>
-                    </div>
-                  </article>
-                </div>
-              </div>
-
-              <div className="absolute -right-1 -bottom-5 flex items-center gap-3 rounded-2xl border border-border bg-popover/90 px-4 py-3 shadow-xl shadow-foreground/10 backdrop-blur sm:-right-5">
-                <div className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                  <Feather aria-hidden="true" className="size-4" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Today
-                  </p>
-                  <p className="text-sm font-extrabold text-foreground">682 words written</p>
-                </div>
-              </div>
+                </figcaption>
+              </figure>
             </div>
           </div>
         </section>
@@ -226,26 +182,84 @@ export default function Home() {
         </section>
 
         <section
-          className="mx-auto w-full max-w-4xl px-5 py-20 text-center sm:px-8 lg:py-28"
+          className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-28"
+          id="workspace"
+        >
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+              The actual workspace
+            </p>
+            <h2 className="mt-4 text-balance font-heading text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
+              Everything your novel needs. Nothing it doesn&apos;t.
+            </h2>
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
+              Move from your local library to a book, then shift between reading and Markdown
+              writing without waiting for another page to load.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-6 lg:grid-cols-2">
+            <figure className="overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-xl shadow-foreground/5">
+              <Image
+                alt="Awthor Paper theme library with two locally stored novels"
+                className="aspect-[3/2] w-full object-cover object-top"
+                height={1024}
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                src="/screenshots/awthor-library.jpg"
+                width={1536}
+              />
+              <figcaption className="border-t border-border px-6 py-5">
+                <p className="font-heading text-lg font-semibold tracking-tight">A quiet library</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Search, create, and open books stored privately in this browser.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure className="overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-xl shadow-foreground/5">
+              <Image
+                alt="Awthor Stone theme writing mode showing a Markdown chapter editor"
+                className="aspect-[3/2] w-full object-cover object-top"
+                height={1024}
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                src="/screenshots/awthor-writing.jpg"
+                width={1536}
+              />
+              <figcaption className="border-t border-border px-6 py-5">
+                <p className="font-heading text-lg font-semibold tracking-tight">
+                  Read and write, seamlessly
+                </p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Switch modes in place and keep the manuscript in portable Markdown.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section
+          className="border-t border-border bg-muted/40 px-5 py-20 text-center sm:px-8 lg:py-28"
           id="how-it-works"
         >
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
-            From blank page to final chapter
-          </p>
-          <h2 className="mt-4 text-balance font-heading text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
-            Less managing. More writing.
-          </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Create a book, break it into chapters, and return each day to the exact place you left
-            off. Awthor keeps the process light, your words private, and your story moving.
-          </p>
-          <Link
-            className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:gap-3"
-            href="/books"
-          >
-            Open your local library
-            <ArrowRight aria-hidden="true" className="size-4" />
-          </Link>
+          <div className="mx-auto w-full max-w-4xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+              From blank page to final chapter
+            </p>
+            <h2 className="mt-4 text-balance font-heading text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
+              Less managing. More writing.
+            </h2>
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
+              Create a book, break it into chapters, and return each day to the exact place you left
+              off. Awthor keeps the process light, your words private, and your story moving.
+            </p>
+            <Link
+              className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:gap-3"
+              href="/books"
+            >
+              Open your local library
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </Link>
+          </div>
         </section>
 
         <section className="px-5 pb-8 sm:px-8" id="open-source">
@@ -319,6 +333,11 @@ export default function Home() {
                 <li>
                   <a className="transition-colors hover:text-foreground" href="#features">
                     Features
+                  </a>
+                </li>
+                <li>
+                  <a className="transition-colors hover:text-foreground" href="#workspace">
+                    See Awthor
                   </a>
                 </li>
                 <li>

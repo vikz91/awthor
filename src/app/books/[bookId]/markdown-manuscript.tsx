@@ -4,10 +4,11 @@ import remarkGfm from "remark-gfm";
 import { sanitizeMarkdownUrl, sanitizeRemoteImageUrl } from "@/lib/markdown";
 
 type MarkdownManuscriptProps = {
+  imageLoading?: "eager" | "lazy";
   source: string;
 };
 
-export function MarkdownManuscript({ source }: MarkdownManuscriptProps) {
+export function MarkdownManuscript({ imageLoading = "lazy", source }: MarkdownManuscriptProps) {
   return (
     <ReactMarkdown
       components={{
@@ -29,22 +30,24 @@ export function MarkdownManuscript({ source }: MarkdownManuscriptProps) {
           </code>
         ),
         h1: ({ children }) => (
-          <h2 className="mt-1 mb-10 font-heading text-4xl leading-tight font-medium tracking-[-0.035em] sm:text-5xl">
+          <h2 className="manuscript-reader mt-1 mb-10 font-serif text-4xl leading-tight font-medium tracking-[-0.03em] sm:text-5xl">
             {children}
           </h2>
         ),
         h2: ({ children }) => (
-          <h2 className="mt-12 mb-5 font-heading text-3xl leading-tight font-medium tracking-[-0.025em]">
+          <h2 className="manuscript-reader mt-12 mb-5 font-serif text-3xl leading-tight font-medium tracking-[-0.02em]">
             {children}
           </h2>
         ),
         h3: ({ children }) => (
-          <h3 className="mt-9 mb-4 font-heading text-2xl leading-tight font-medium">{children}</h3>
+          <h3 className="manuscript-reader mt-9 mb-4 font-serif text-2xl leading-tight font-medium">
+            {children}
+          </h3>
         ),
-        img: SafeImage,
+        img: (props) => <SafeImage {...props} loading={imageLoading} />,
         li: ({ children }) => <li className="my-2 pl-1">{children}</li>,
         ol: ({ children }) => <ol className="my-7 list-decimal space-y-1 pl-7">{children}</ol>,
-        p: ({ children }) => <p className="my-6 leading-[1.9]">{children}</p>,
+        p: ({ children }) => <p className="my-6 leading-[1.82]">{children}</p>,
         pre: ({ children }) => (
           <pre className="my-7 overflow-x-auto rounded-2xl border border-border bg-card p-4 text-sm">
             {children}
@@ -91,7 +94,7 @@ function SafeLink({ children, href, ...props }: ComponentPropsWithoutRef<"a">) {
   );
 }
 
-function SafeImage({ alt, src }: ComponentPropsWithoutRef<"img">) {
+function SafeImage({ alt, loading = "lazy", src }: ComponentPropsWithoutRef<"img">) {
   const safeSrc = typeof src === "string" ? sanitizeRemoteImageUrl(src) : null;
 
   if (!safeSrc) {
@@ -109,7 +112,7 @@ function SafeImage({ alt, src }: ComponentPropsWithoutRef<"img">) {
       alt={alt ?? ""}
       className="my-8 h-auto max-h-[70vh] w-full rounded-2xl border border-border object-contain"
       decoding="async"
-      loading="lazy"
+      loading={loading}
       referrerPolicy="no-referrer"
       src={safeSrc}
     />
