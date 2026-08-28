@@ -67,6 +67,7 @@ export function FloatingToolbar({
   const activeIndexRef = useRef(activeIndex);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const contentRef = useRef<HTMLFieldSetElement>(null);
   const focusOnRevealRef = useRef(false);
   const handleRef = useRef<HTMLButtonElement>(null);
@@ -286,6 +287,57 @@ export function FloatingToolbar({
     scheduleReveal,
   ]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Alt") {
+        setShowShortcuts(true);
+        showToolbar();
+        return;
+      }
+
+      if (!event.altKey || event.repeat) {
+        return;
+      }
+
+      const itemIndex = itemsRef.current.findIndex(
+        (item) => !item.disabled && shortcutMatchesEvent(item.shortcut, event),
+      );
+      if (itemIndex < 0) {
+        return;
+      }
+
+      event.preventDefault();
+      activeIndexRef.current = itemIndex;
+      setActiveIndex(itemIndex);
+      showToolbar();
+      requestAnimationFrame(() => {
+        contentRef.current
+          ?.querySelector<HTMLElement>(`[data-toolbar-index="${itemIndex}"]`)
+          ?.click();
+      });
+    }
+
+    function hideShortcutHints() {
+      setShowShortcuts(false);
+      scheduleHide();
+    }
+
+    function handleKeyUp(event: KeyboardEvent) {
+      if (event.key === "Alt") {
+        hideShortcutHints();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", hideShortcutHints);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", hideShortcutHints);
+    };
+  }, [scheduleHide, showToolbar]);
+
   function handleToolbarKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       return;
@@ -365,6 +417,7 @@ export function FloatingToolbar({
                       activeIndexRef.current = index;
                       setActiveIndex(index);
                     }}
+                    showShortcut={showShortcuts}
                   />
                 </Fragment>
               ))}
@@ -408,11 +461,13 @@ function ToolbarItem({
   index,
   item,
   onFocus,
+  showShortcut,
 }: {
   activeIndex: number;
   index: number;
   item: FloatingToolbarItem;
   onFocus: () => void;
+  showShortcut: boolean;
 }) {
   const className = cn(
     "relative inline-flex h-12 min-w-18 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-[0.68rem] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-45 motion-reduce:transition-none sm:min-w-20 sm:px-3 sm:text-xs",
@@ -420,9 +475,18 @@ function ToolbarItem({
       ? "bg-primary text-primary-foreground"
       : "text-muted-foreground hover:bg-muted hover:text-foreground",
   );
-  const title = item.tooltip ?? (item.shortcut ? `${item.label} (${item.shortcut})` : item.label);
+  const title = item.tooltip
+    ? `${item.tooltip}${item.shortcut ? ` · ${shortcutTitle(item.shortcut)}` : ""}`
+    : item.shortcut
+      ? `${item.label} (${shortcutTitle(item.shortcut)})`
+      : item.label;
   const content = (
     <>
+      {showShortcut && item.shortcut ? (
+        <kbd className="absolute top-0.5 right-1 grid min-w-4 animate-in place-items-center rounded-sm border border-border bg-foreground px-1 font-mono text-[0.6rem] leading-4 font-bold text-background shadow-sm fade-in zoom-in-95 motion-reduce:animate-none">
+          {shortcutBadge(item.shortcut)}
+        </kbd>
+      ) : null}
       <span aria-hidden="true" className="grid size-4 place-items-center">
         <MotionIcon
           animation="nudge"
@@ -485,6 +549,22 @@ function enabledControls(container: HTMLElement | null): HTMLElement[] {
       "[data-toolbar-item]:not([disabled]):not([aria-disabled='true'])",
     ),
   );
+}
+
+function shortcutBadge(shortcut: string) {
+  return shortcut.split("+").at(-1) ?? shortcut;
+}
+
+function shortcutTitle(shortcut: string) {
+  return shortcut.replace(/^Alt\+/u, "Option/Alt+");
+}
+
+function shortcutMatchesEvent(shortcut: string | undefined, event: KeyboardEvent) {
+  if (!shortcut?.startsWith("Alt+")) {
+    return false;
+  }
+
+  return event.code === `Digit${shortcutBadge(shortcut)}`;
 }
 
 declare global {

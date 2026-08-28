@@ -7,8 +7,32 @@ export type ManuscriptCounts = {
   characterCountWithSpaces: number;
 };
 
+export type MarkdownSelectionFormat = "bold" | "italic" | "strikethrough" | "quote";
+
+export type MarkdownSelectionResult = {
+  source: string;
+  selectionStart: number;
+  selectionEnd: number;
+};
+
 const whitespacePattern = /\s/u;
 const wordPattern = /[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu;
+const leadingMarkdownTitlePattern = /^\s*#\s+([^\r\n]*)(?:\r?\n)?/u;
+
+export function getLeadingMarkdownTitle(source: string): string | null {
+  const title = source.match(leadingMarkdownTitlePattern)?.[1]?.trim();
+  return title || null;
+}
+
+export function withoutLeadingMarkdownTitle(source: string): string {
+  return source.replace(leadingMarkdownTitlePattern, "").trimStart();
+}
+
+export function withLeadingMarkdownTitle(source: string, title: string): string {
+  const normalizedTitle = title.trim() || "Untitled chapter";
+  const body = withoutLeadingMarkdownTitle(source);
+  return body ? `# ${normalizedTitle}\n\n${body}` : `# ${normalizedTitle}\n`;
+}
 
 /** Counts the source exactly as it is stored, including Markdown punctuation. */
 export function countManuscript(source: string): ManuscriptCounts {
@@ -100,4 +124,127 @@ export function generatedCoverVariant(bookId: string, variantCount = 6): number 
   }
 
   return (hash >>> 0) % variantCount;
+}
+
+/** Applies or removes a Markdown format while preserving a useful selection. */
+export function formatMarkdownSelection(
+  source: string,
+  selectionStart: number,
+  selectionEnd: number,
+  format: MarkdownSelectionFormat,
+): MarkdownSelectionResult {
+  const start = Math.max(0, Math.min(source.length, Math.min(selectionStart, selectionEnd)));
+  const end = Math.max(start, Math.min(source.length, Math.max(selectionStart, selectionEnd)));
+
+  if (start === end) {
+    return { source, selectionStart: start, selectionEnd: end };
+  }
+
+  if (format === "quote") {
+    return formatQuotedLines(source, start, end);
+  }
+
+  const marker = format === "bold" ? "**" : format === "strikethrough" ? "~~" : "*";
+  const selected = source.slice(start, end);
+  const selectedIsWrapped = isSelectionWrapped(selected, format, marker);
+
+  if (selectedIsWrapped) {
+    const unwrapped = selected.slice(marker.length, -marker.length);
+    return {
+      source: `${source.slice(0, start)}${unwrapped}${source.slice(end)}`,
+      selectionStart: start,
+      selectionEnd: start + unwrapped.length,
+    };
+  }
+
+  const surroundingIsWrapped = isSelectionSurrounded(source, start, end, format, marker);
+  if (surroundingIsWrapped) {
+    return {
+      source: `${source.slice(0, start - marker.length)}${selected}${source.slice(end + marker.length)}`,
+      selectionStart: start - marker.length,
+      selectionEnd: end - marker.length,
+    };
+  }
+
+  return {
+    source: `${source.slice(0, start)}${marker}${selected}${marker}${source.slice(end)}`,
+    selectionStart: start + marker.length,
+    selectionEnd: end + marker.length,
+  };
+}
+
+function isSelectionWrapped(
+  selected: string,
+  format: Exclude<MarkdownSelectionFormat, "quote">,
+  marker: string,
+): boolean {
+  if (
+    selected.length < marker.length * 2 ||
+    !selected.startsWith(marker) ||
+    !selected.endsWith(marker)
+  ) {
+    return false;
+  }
+
+  return format !== "italic" || edgeMarkerRun(selected, 0, 1) % 2 === 1;
+}
+
+function isSelectionSurrounded(
+  source: string,
+  start: number,
+  end: number,
+  format: Exclude<MarkdownSelectionFormat, "quote">,
+  marker: string,
+): boolean {
+  if (
+    start < marker.length ||
+    source.slice(start - marker.length, start) !== marker ||
+    source.slice(end, end + marker.length) !== marker
+  ) {
+    return false;
+  }
+
+  if (format !== "italic") {
+    return true;
+  }
+
+  const leadingRun = edgeMarkerRun(source, start - 1, -1);
+  const trailingRun = edgeMarkerRun(source, end, 1);
+  return leadingRun % 2 === 1 && trailingRun % 2 === 1;
+}
+
+function edgeMarkerRun(source: string, index: number, direction: -1 | 1): number {
+  let count = 0;
+  for (let cursor = index; cursor >= 0 && cursor < source.length; cursor += direction) {
+    if (source[cursor] !== "*") {
+      break;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+function formatQuotedLines(source: string, start: number, end: number): MarkdownSelectionResult {
+  const lineStart = source.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const selectionTail = end > lineStart && source[end - 1] === "\n" ? end - 1 : end;
+  const nextLineBreak = source.indexOf("\n", selectionTail);
+  const lineEnd = nextLineBreak < 0 ? source.length : nextLineBreak;
+  const block = source.slice(lineStart, lineEnd);
+  const lines = block.split("\n");
+  const contentLines = lines.filter((line) => line.trim().length > 0);
+  const removeQuote = contentLines.length > 0 && contentLines.every((line) => /^>\s?/u.test(line));
+  const replacement = lines
+    .map((line) => {
+      if (removeQuote) {
+        return line.replace(/^>\s?/u, "");
+      }
+      return line.length > 0 ? `> ${line}` : ">";
+    })
+    .join("\n");
+
+  return {
+    source: `${source.slice(0, lineStart)}${replacement}${source.slice(lineEnd)}`,
+    selectionStart: lineStart,
+    selectionEnd: lineStart + replacement.length,
+  };
 }

@@ -1,5 +1,10 @@
 import { type ZodType, z } from "zod";
-import { countManuscript, sanitizeRemoteImageUrl } from "../markdown";
+import {
+  countManuscript,
+  getLeadingMarkdownTitle,
+  sanitizeRemoteImageUrl,
+  withLeadingMarkdownTitle,
+} from "../markdown";
 import {
   type AwthorBackupV2,
   type AwthorRepository,
@@ -334,13 +339,15 @@ function slugify(value: string): string {
 
 function emptyChapter(number: number, input: CreateChapterInput = {}): Chapter {
   const now = new Date().toISOString();
-  const body = input.body ?? "";
+  const title =
+    input.title?.trim() || getLeadingMarkdownTitle(input.body ?? "") || `Chapter ${number}`;
+  const body = withLeadingMarkdownTitle(input.body ?? "", title);
   const counts = countManuscript(body);
 
   return chapterSchema.parse({
     id: createId(),
     number,
-    title: input.title?.trim() || `Chapter ${number}`,
+    title,
     summary: "",
     status: "Draft",
     ...counts,
@@ -613,6 +620,7 @@ class LocalAwthorRepository implements AwthorRepository {
       delete data.characters[bookId];
       delete data.settings.lastChapterByBook[bookId];
       delete data.settings.readingPositionByBook[bookId];
+      delete data.settings.proofreadingByBook[bookId];
       if (data.settings.activeBookId === bookId) {
         data.settings.activeBookId = data.books[0]?.id ?? null;
       }
@@ -651,12 +659,19 @@ class LocalAwthorRepository implements AwthorRepository {
 
       const now = new Date().toISOString();
       const current = chapters[chapterIndex];
-      const body = input.body ?? current.body;
+      const explicitTitle =
+        input.title?.trim() || (input.title === undefined ? null : "Untitled chapter");
+      const body =
+        explicitTitle === null
+          ? (input.body ?? current.body)
+          : withLeadingMarkdownTitle(input.body ?? current.body, explicitTitle);
+      const bodyChanged = body !== current.body;
       const updated = chapterSchema.parse({
         ...current,
         ...input,
-        ...(input.body === undefined ? {} : countManuscript(body)),
+        ...(bodyChanged ? countManuscript(body) : {}),
         body,
+        title: explicitTitle ?? getLeadingMarkdownTitle(body) ?? current.title,
         updatedAt: now,
       });
       const nextChapters = chapters.map((chapter, index) =>
@@ -741,6 +756,7 @@ class LocalAwthorRepository implements AwthorRepository {
         ...chapters[chapterIndex],
         ...countManuscript(markdown),
         body: markdown,
+        title: getLeadingMarkdownTitle(markdown) ?? chapters[chapterIndex].title,
         updatedAt: now,
       });
       const nextChapters = chapters.map((value, index) =>

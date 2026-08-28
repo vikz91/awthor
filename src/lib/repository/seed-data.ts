@@ -122,6 +122,7 @@ export function createSeedRepositoryData(now = seededAt): RepositoryData {
     profile: {
       authorName: "Alex Parker",
       contactEmail: "alex.parker@example.com",
+      defaultProofreadingDialect: "american",
       website: "https://alexparker.example",
       theme: "paper",
     },

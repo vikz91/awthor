@@ -14,9 +14,18 @@ export const themeSchema = z.preprocess((value) => {
 }, z.enum(themes));
 export type Theme = z.infer<typeof themeSchema>;
 
+export const bookProofreadingDialects = [
+  "american",
+  "british",
+  "australian",
+  "canadian",
+  "indian",
+] as const;
+
 export const onboardingDetailsSchema = z.object({
   authorName: z.string().default(""),
   contactEmail: z.string().default(""),
+  defaultProofreadingDialect: z.enum(bookProofreadingDialects).default("american"),
   theme: themeSchema.default("paper"),
   website: z.string().default(""),
 });
@@ -62,10 +71,23 @@ export const bookSchema = z.object({
 });
 export type Book = z.infer<typeof bookSchema>;
 
+export const bookProofreadingSettingsSchema = z.object({
+  dialect: z.enum(bookProofreadingDialects).default("american"),
+  words: z.array(z.string()).default([]),
+});
+export type BookProofreadingSettings = z.infer<typeof bookProofreadingSettingsSchema>;
+
+export function createDefaultBookProofreadingSettings(
+  dialect: BookProofreadingSettings["dialect"] = "american",
+): BookProofreadingSettings {
+  return bookProofreadingSettingsSchema.parse({ dialect });
+}
+
 export const appSettingsSchema = z.object({
   activeBookId: z.string().nullable().default(null),
   lastChapterByBook: z.record(z.string(), z.string()).default({}),
   readingPositionByBook: z.record(z.string(), z.number().finite().min(0).max(1)).default({}),
+  proofreadingByBook: z.record(z.string(), bookProofreadingSettingsSchema).default({}),
   editor: z
     .object({
       fontFamily: z.string().default("serif"),
@@ -93,6 +115,17 @@ export type AppSettings = z.infer<typeof appSettingsSchema>;
 
 export function createDefaultAppSettings(): AppSettings {
   return appSettingsSchema.parse({});
+}
+
+export function resolveBookProofreadingSettings(
+  settings: AppSettings,
+  profile: OnboardingDetails | null,
+  bookId: string,
+): BookProofreadingSettings {
+  return (
+    settings.proofreadingByBook[bookId] ??
+    createDefaultBookProofreadingSettings(profile?.defaultProofreadingDialect)
+  );
 }
 
 export const characterSchema = z.object({

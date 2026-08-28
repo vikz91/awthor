@@ -6,7 +6,14 @@ import type * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-function Drawer({ swipeDirection = "right", ...props }: DrawerPrimitive.Root.Props) {
+type DrawerProps = DrawerPrimitive.Root.Props;
+
+type DrawerContentProps = DrawerPrimitive.Popup.Props & {
+  presentation?: "overlay" | "workspace-inspector";
+  showCloseButton?: boolean;
+};
+
+function Drawer({ swipeDirection = "right", ...props }: DrawerProps) {
   return <DrawerPrimitive.Root swipeDirection={swipeDirection} {...props} />;
 }
 
@@ -43,18 +50,30 @@ function DrawerViewport({ className, ...props }: DrawerPrimitive.Viewport.Props)
 function DrawerContent({
   children,
   className,
+  presentation = "overlay",
   showCloseButton = true,
   ...props
-}: DrawerPrimitive.Popup.Props & { showCloseButton?: boolean }) {
+}: DrawerContentProps) {
+  const isWorkspaceInspector = presentation === "workspace-inspector";
+
   return (
     <DrawerPortal>
-      <DrawerBackdrop />
-      <DrawerViewport>
+      <DrawerBackdrop className={isWorkspaceInspector ? "min-[72rem]:hidden" : undefined} />
+      <DrawerViewport
+        className={
+          isWorkspaceInspector
+            ? "min-[72rem]:top-16 min-[72rem]:bottom-0 min-[72rem]:left-auto min-[72rem]:min-h-0 min-[72rem]:w-[var(--workspace-inspector-width)]"
+            : undefined
+        }
+      >
         <DrawerPrimitive.Popup
           className={cn(
             "pointer-events-auto h-dvh w-full overflow-hidden border-l border-border bg-popover text-popover-foreground shadow-2xl shadow-foreground/10 outline-none [transform:translateX(var(--drawer-swipe-movement-x))] transition-transform duration-200 ease-out data-ending-style:translate-x-full data-starting-style:translate-x-full data-swiping:select-none data-swiping:duration-0 motion-reduce:transition-none sm:w-[min(64rem,92vw)]",
+            isWorkspaceInspector &&
+              "min-[72rem]:h-full min-[72rem]:w-full min-[72rem]:border-l-primary/25 min-[72rem]:shadow-none min-[72rem]:[&_[data-slot=drawer-header]]:border-b-0",
             className,
           )}
+          data-presentation={presentation}
           data-slot="drawer-content"
           finalFocus={false}
           {...props}
@@ -134,3 +153,4 @@ export {
   DrawerTitle,
   DrawerViewport,
 };
+export type { DrawerContentProps, DrawerProps };

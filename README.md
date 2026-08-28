@@ -45,11 +45,27 @@ Books always open in Read mode at the last chapter and saved reading position. W
 same chapter as Markdown source and autosaves through `AwthorRepository`; switching modes does not
 navigate or load another page. Read mode supports GitHub Flavored Markdown, including headings,
 lists, task lists, tables, links, quotes, code, strikethrough, and remote images. Raw HTML is not
-rendered.
+rendered. The leading `# Heading` is the editable chapter title and stays synchronized with chapter
+navigation and metadata. Longer chapters receive a subtle desktop progress rail with clickable
+viewport-sized reading positions; the manuscript remains a continuous document and reduced-motion
+preferences are respected.
+
+In Write mode, selecting text opens a compact contextual formatter above the selection. Bold,
+italic, strikethrough, and line-aware quote actions edit the Markdown source directly, preserve the
+selection, and follow the normal local autosave path. No permanent formatting toolbar is shown.
+
+The Focus icon beside Read/Write enters a temporary distraction-free workspace. Awthor requests
+browser fullscreen when available and falls back to an in-page full-viewport layout when it is not;
+both variants hide the top bar, writing tools, progress rail, page scrollbar, and chapter controls
+while preserving the current mode, manuscript position, and editor caret. A brief notice explains
+that `Escape` exits Focus mode. The subtle bottom exit control then hides completely—with no cue—and
+returns only when the pointer approaches the bottom edge or a touch user taps the bottom zone. Focus
+mode is never persisted.
 
 The existing floating toolbar contains four in-place controls:
 
-- **Spell check** — local spelling, grammar, and style feedback from Harper.js
+- **Spell check** — local spelling, grammar, and style feedback from Harper.js, with a per-book
+  English dialect and custom vocabulary for names and transliterated words
 - **Characters** — searchable character list and editable dossier
 - **Chapter arc** — per-chapter stage, tension, goal, conflict, and outcome
 - **Counts** — toggles a live word and character count for the current chapter
@@ -66,8 +82,12 @@ Keyboard shortcuts:
 | `Alt/Option + W` | Enter Write mode |
 | `Alt/Option + R` | Return to Read mode |
 | `Alt/Option + T` | Reveal and focus the writing tools |
+| Hold `Alt/Option` | Show numbered toolbar shortcuts |
+| `Alt/Option + 1–4` | Activate Spell check, Characters, Chapter arc, or Counts |
+| `Ctrl/Cmd + B` | Bold the current text selection |
+| `Ctrl/Cmd + I` | Italicize the current text selection |
 | `Ctrl/Cmd + S` | Save the current manuscript immediately |
-| `Escape` | Close the active overlay, or return to Read |
+| `Escape` | Exit Focus mode first; otherwise close the active overlay or return to Read |
 
 Every shortcut has a visible control.
 
@@ -81,8 +101,11 @@ A safe v1 migration preserves supported books, chapters, characters, profile, th
 Legacy Notes and Plot records are intentionally discarded only after all v2 writes succeed. If a
 migration fails, the v1 records remain untouched and the interface offers Retry.
 
-Harper proofreading loads only when requested and runs inside the browser. Manuscript and profile
-text are never sent to Harper or Awthor servers.
+Harper proofreading loads only when requested and runs inside the browser. Author settings define
+the default American, British, Australian, Canadian, or Indian English dialect; books inherit that
+choice until given a book-specific override. Each book also keeps a local custom dictionary for
+names, invented terms, and Bengali transliterations. Manuscript, profile, and dictionary text are
+never sent to Harper or Awthor servers.
 
 Remote cover and Markdown image URLs are optional. Loading one contacts that image host, so the host
 can receive normal request metadata such as the visitor's IP address even though the manuscript and

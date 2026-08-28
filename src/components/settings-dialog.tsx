@@ -2,6 +2,7 @@
 
 import { HardDrive, LoaderCircle, Moon, Sun } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
+import { ProofreadingDialectSelect } from "@/components/proofreading-dialect-select";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DrawerBody, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WorkspaceInspector } from "@/components/ui/workspace-inspector";
 import { getAwthorRepository, type OnboardingDetails, type Theme } from "@/lib/repository";
 import { cn } from "@/lib/utils";
 
@@ -25,14 +28,41 @@ type SettingsDialogProps = {
   onSaved?: (profile: OnboardingDetails) => void;
 };
 
+type SettingsSurfaceProps = SettingsDialogProps & {
+  presentation: "dialog" | "inspector";
+};
+
 const emptyProfile: OnboardingDetails = {
   authorName: "",
   contactEmail: "",
+  defaultProofreadingDialect: "american",
   website: "",
   theme: "paper",
 };
 
 export function SettingsDialog({ onSaved, open, onOpenChange }: SettingsDialogProps) {
+  return (
+    <SettingsSurface
+      onOpenChange={onOpenChange}
+      onSaved={onSaved}
+      open={open}
+      presentation="dialog"
+    />
+  );
+}
+
+export function SettingsInspector({ onSaved, open, onOpenChange }: SettingsDialogProps) {
+  return (
+    <SettingsSurface
+      onOpenChange={onOpenChange}
+      onSaved={onSaved}
+      open={open}
+      presentation="inspector"
+    />
+  );
+}
+
+function SettingsSurface({ onSaved, open, onOpenChange, presentation }: SettingsSurfaceProps) {
   const { theme: activeTheme, setTheme } = useTheme();
   const [profile, setProfile] = useState<OnboardingDetails>(emptyProfile);
   const [loading, setLoading] = useState(false);
@@ -99,6 +129,7 @@ export function SettingsDialog({ onSaved, open, onOpenChange }: SettingsDialogPr
     const nextProfile: OnboardingDetails = {
       authorName: profile.authorName.trim(),
       contactEmail: profile.contactEmail.trim(),
+      defaultProofreadingDialect: profile.defaultProofreadingDialect,
       website: profile.website.trim(),
       theme: profile.theme,
     };
@@ -118,105 +149,142 @@ export function SettingsDialog({ onSaved, open, onOpenChange }: SettingsDialogPr
     }
   }
 
+  const formId =
+    presentation === "inspector" ? "awthor-inspector-settings-form" : "awthor-settings-form";
+  const editor = loading ? (
+    <div className="flex min-h-64 items-center justify-center text-muted-foreground">
+      <LoaderCircle aria-hidden="true" className="mr-2 size-4 animate-spin" />
+      Loading settings…
+    </div>
+  ) : (
+    <form className="@container grid gap-5" id={formId} onSubmit={handleSubmit}>
+      <div className="grid gap-2">
+        <Label htmlFor="settings-author-name">Author name</Label>
+        <Input
+          autoComplete="name"
+          id="settings-author-name"
+          onChange={(event) => updateField("authorName", event.target.value)}
+          placeholder="Your pen name"
+          required
+          value={profile.authorName}
+        />
+      </div>
+
+      <div className="grid gap-4 @min-[34rem]:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="settings-email">Email</Label>
+          <Input
+            autoComplete="email"
+            id="settings-email"
+            onChange={(event) => updateField("contactEmail", event.target.value)}
+            placeholder="you@example.com"
+            type="email"
+            value={profile.contactEmail}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="settings-website">Website</Label>
+          <Input
+            autoComplete="url"
+            id="settings-website"
+            onChange={(event) => updateField("website", event.target.value)}
+            placeholder="https://example.com"
+            type="url"
+            value={profile.website}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="settings-proofreading-dialect">Default target language</Label>
+        <ProofreadingDialectSelect
+          id="settings-proofreading-dialect"
+          onChange={(dialect) => updateField("defaultProofreadingDialect", dialect)}
+          value={profile.defaultProofreadingDialect}
+        />
+        <p className="text-xs leading-5 text-muted-foreground">
+          Books use this English dialect until you choose a book-specific one.
+        </p>
+      </div>
+
+      <fieldset className="grid gap-2">
+        <legend className="text-sm font-medium">Theme</legend>
+        <div className="grid grid-cols-2 gap-2">
+          <ThemeChoice
+            checked={profile.theme === "paper"}
+            description="Warm and bright"
+            icon={Sun}
+            label="Paper"
+            onChange={() => updateField("theme", "paper")}
+            value="paper"
+          />
+          <ThemeChoice
+            checked={profile.theme === "stone"}
+            description="Low-glare reading"
+            icon={Moon}
+            label="Stone"
+            onChange={() => updateField("theme", "stone")}
+            value="stone"
+          />
+        </div>
+      </fieldset>
+
+      <div className="flex items-start gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+        <HardDrive aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+        Awthor stores this profile and your manuscripts in this browser, not on an Awthor server.
+      </div>
+
+      {error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+  const footer = (
+    <>
+      <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+        Cancel
+      </Button>
+      <Button disabled={loading || saving} form={formId} type="submit">
+        {saving && <LoaderCircle aria-hidden="true" className="animate-spin" />}
+        {saving ? "Saving…" : "Save settings"}
+      </Button>
+    </>
+  );
+
+  if (presentation === "inspector") {
+    return (
+      <WorkspaceInspector onOpenChange={onOpenChange} open={open}>
+        <DrawerHeader>
+          <DrawerTitle>Settings</DrawerTitle>
+          <DrawerDescription>
+            Your author profile, proofreading language, and reading theme. These details stay on
+            this device.
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="@container px-4 py-5 sm:px-6">
+          {editor}
+          <div className="sticky bottom-0 mt-6 flex justify-end gap-2 border-t border-border bg-popover/95 pt-4 pb-[max(0rem,env(safe-area-inset-bottom))] backdrop-blur">
+            {footer}
+          </div>
+        </DrawerBody>
+      </WorkspaceInspector>
+    );
+  }
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-xl">Settings</DialogTitle>
           <DialogDescription>
-            A compact author profile and reading theme. These details stay on this device.
+            A compact author profile, proofreading language, and reading theme. These details stay
+            on this device.
           </DialogDescription>
         </DialogHeader>
-
-        {loading ? (
-          <div className="flex min-h-64 items-center justify-center text-muted-foreground">
-            <LoaderCircle aria-hidden="true" className="mr-2 size-4 animate-spin" />
-            Loading settings…
-          </div>
-        ) : (
-          <form className="grid gap-5" id="awthor-settings-form" onSubmit={handleSubmit}>
-            <div className="grid gap-2">
-              <Label htmlFor="settings-author-name">Author name</Label>
-              <Input
-                autoComplete="name"
-                id="settings-author-name"
-                onChange={(event) => updateField("authorName", event.target.value)}
-                placeholder="Your pen name"
-                required
-                value={profile.authorName}
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="settings-email">Email</Label>
-                <Input
-                  autoComplete="email"
-                  id="settings-email"
-                  onChange={(event) => updateField("contactEmail", event.target.value)}
-                  placeholder="you@example.com"
-                  type="email"
-                  value={profile.contactEmail}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="settings-website">Website</Label>
-                <Input
-                  autoComplete="url"
-                  id="settings-website"
-                  onChange={(event) => updateField("website", event.target.value)}
-                  placeholder="https://example.com"
-                  type="url"
-                  value={profile.website}
-                />
-              </div>
-            </div>
-
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-medium">Theme</legend>
-              <div className="grid grid-cols-2 gap-2">
-                <ThemeChoice
-                  checked={profile.theme === "paper"}
-                  description="Warm and bright"
-                  icon={Sun}
-                  label="Paper"
-                  onChange={() => updateField("theme", "paper")}
-                  value="paper"
-                />
-                <ThemeChoice
-                  checked={profile.theme === "stone"}
-                  description="Low-glare reading"
-                  icon={Moon}
-                  label="Stone"
-                  onChange={() => updateField("theme", "stone")}
-                  value="stone"
-                />
-              </div>
-            </fieldset>
-
-            <div className="flex items-start gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs leading-5 text-muted-foreground">
-              <HardDrive aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              Awthor stores this profile and your manuscripts in this browser, not on an Awthor
-              server.
-            </div>
-
-            {error && (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            )}
-          </form>
-        )}
-
-        <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
-            Cancel
-          </Button>
-          <Button disabled={loading || saving} form="awthor-settings-form" type="submit">
-            {saving && <LoaderCircle aria-hidden="true" className="animate-spin" />}
-            {saving ? "Saving…" : "Save settings"}
-          </Button>
-        </DialogFooter>
+        {editor}
+        <DialogFooter>{footer}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

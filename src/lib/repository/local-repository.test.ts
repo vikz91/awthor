@@ -6,6 +6,7 @@ import {
   repositoryPrefix,
   type StorageLike,
 } from "./local-repository";
+import { resolveBookProofreadingSettings } from "./models";
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -58,6 +59,12 @@ function legacyEntries(): Record<string, string> {
 
   return {
     "awthor-theme": "light",
+    "awthor:onboarding:v1": v1Stored({
+      authorName: "A. Writer",
+      contactEmail: "writer@example.com",
+      theme: "light",
+      website: "https://example.com",
+    }),
     [`${legacyRepositoryPrefix}:books`]: v1Stored([book]),
     [`${legacyRepositoryPrefix}:chapters:${scope}`]: v1Stored([
       {
@@ -103,12 +110,14 @@ describe("local repository v2", () => {
     );
     expect(storage.getItem(`${repositoryPrefix}:books`)).not.toBeNull();
     expect(await repository.theme.get()).toBe("paper");
+    expect((await repository.profile.get())?.defaultProofreadingDialect).toBe("american");
 
     const chapters = await repository.chapters.list("legacy-book");
     expect(chapters?.[0]).toMatchObject({
       body: "Hello old world",
       arc: { stage: "Unassigned", tension: 3, goal: "", conflict: "", outcome: "" },
     });
+    expect((await repository.settings.get())?.proofreadingByBook).toEqual({});
   });
 
   test("rolls back partial v2 writes, leaves every v1 key, and can retry", async () => {
@@ -151,6 +160,7 @@ describe("local repository v2", () => {
     const book = await repository.createBook({ title: "North Star", author: "A. Writer" });
     const chapters = await repository.chapters.list(book.id);
     expect(chapters).toHaveLength(1);
+    expect(chapters?.[0]).toMatchObject({ title: "Chapter 1", body: "# Chapter 1\n" });
 
     const saved = await repository.saveManuscript(
       book.id,
@@ -158,11 +168,52 @@ describe("local repository v2", () => {
       "# Hello\n\nTwo worlds meet.",
     );
     expect(saved.chapter.wordCount).toBe(4);
+    expect(saved.chapter.title).toBe("Hello");
     expect(saved.book).toMatchObject({ chapterCount: 1, pageCount: 1, wordCount: 4 });
+
+    const renamed = await repository.updateChapter(book.id, saved.chapter.id, {
+      title: "A Better Hello",
+    });
+    expect(renamed.body).toBe("# A Better Hello\n\nTwo worlds meet.");
 
     const backup = await repository.exportBackup();
     expect(backup.version).toBe(2);
     expect(backup.data.books[0].id).toBe(book.id);
+  });
+
+  test("persists the user's default dialect and lets books override it", async () => {
+    const storage = new MemoryStorage();
+    const repository = createLocalAwthorRepository(() => storage);
+    await repository.initialize();
+    await repository.profile.save({
+      authorName: "A. Writer",
+      contactEmail: "writer@example.com",
+      defaultProofreadingDialect: "indian",
+      theme: "paper",
+      website: "https://example.com",
+    });
+    const book = await repository.createBook({ title: "Inheritance", author: "A. Writer" });
+    const profile = await repository.profile.get();
+    const settings = await repository.settings.get();
+    if (!settings) {
+      throw new Error("Expected settings after repository initialization.");
+    }
+
+    expect(profile?.defaultProofreadingDialect).toBe("indian");
+    expect(resolveBookProofreadingSettings(settings, profile, book.id).dialect).toBe("indian");
+
+    const withOverride = {
+      ...settings,
+      proofreadingByBook: {
+        ...settings.proofreadingByBook,
+        [book.id]: { dialect: "british" as const, words: ["colourway"] },
+      },
+    };
+    await repository.settings.save(withOverride);
+    expect(resolveBookProofreadingSettings(withOverride, profile, book.id)).toEqual({
+      dialect: "british",
+      words: ["colourway"],
+    });
   });
 
   test("serializes settings writes with manuscript snapshot mutations", async () => {
@@ -203,8 +254,20 @@ describe("local repository v2", () => {
     await expect(repository.deleteChapter(book.id, chapter?.id ?? "missing")).rejects.toThrow(
       "at least one chapter",
     );
+    const settings = await repository.settings.get();
+    if (!settings) {
+      throw new Error("Expected settings after creating a book.");
+    }
+    await repository.settings.save({
+      ...settings,
+      proofreadingByBook: {
+        ...settings.proofreadingByBook,
+        [book.id]: { dialect: "indian", words: ["boudi", "pujo"] },
+      },
+    });
     await repository.deleteBook(book.id);
     expect((await repository.books.get()) ?? []).toEqual([]);
+    expect((await repository.settings.get())?.proofreadingByBook[book.id]).toBeUndefined();
     expect(
       storage.getItem(`${repositoryPrefix}:chapters:${encodeURIComponent(book.id)}`),
     ).toBeNull();

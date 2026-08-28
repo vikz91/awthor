@@ -1,21 +1,25 @@
 "use client";
 
-import { Eye, EyeOff, LoaderCircle, Plus, Save, Search, Trash2, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Drawer,
-  DrawerBody,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+import { DrawerBody, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkspaceInspector } from "@/components/ui/workspace-inspector";
 import { sanitizeRemoteImageUrl } from "@/lib/markdown";
 import { type Character, getAwthorRepository } from "@/lib/repository";
 import { cn } from "@/lib/utils";
@@ -28,6 +32,7 @@ type CharactersDrawerProps = {
 };
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
+type CharacterPane = "list" | "detail";
 
 const repository = getAwthorRepository();
 
@@ -41,6 +46,7 @@ export function CharactersDrawer({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draft, setDraft] = useState<Character | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pane, setPane] = useState<CharacterPane>("list");
   const [query, setQuery] = useState("");
   const [saveLabel, setSaveLabel] = useState("");
   const [showHidden, setShowHidden] = useState(false);
@@ -140,6 +146,7 @@ export function CharactersDrawer({
       });
       setCharacters((current) => [...current, created]);
       setDraft(created);
+      setPane("detail");
       setSaveLabel("New character ready to edit");
     } catch (caughtError) {
       setError(toErrorMessage(caughtError, "The character could not be created."));
@@ -198,175 +205,194 @@ export function CharactersDrawer({
       );
       setConfirmDelete(false);
       setSaveLabel("Character deleted");
+      setPane("list");
     } catch (caughtError) {
       setError(toErrorMessage(caughtError, "The character could not be deleted."));
     }
   }
 
   return (
-    <Drawer onOpenChange={requestOpenChange} open={open}>
-      <DrawerContent>
-        <DrawerHeader className="flex-row items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-              <UserRound aria-hidden="true" className="size-3.5" />
-              Story bible
-            </div>
-            <DrawerTitle className="mt-2">Characters</DrawerTitle>
-            <DrawerDescription>
-              Keep each character’s role, relationships, and arc beside the manuscript.
-            </DrawerDescription>
+    <WorkspaceInspector onOpenChange={requestOpenChange} open={open}>
+      <DrawerHeader className="flex-row items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+            <UserRound aria-hidden="true" className="size-3.5" />
+            Story bible
           </div>
-          <Button className="mr-8 shrink-0" onClick={() => void createCharacter()} size="sm">
-            <Plus aria-hidden="true" />
-            New
-          </Button>
-        </DrawerHeader>
+          <DrawerTitle className="mt-2">Characters</DrawerTitle>
+          <DrawerDescription>
+            Keep each character’s role, relationships, and arc beside the manuscript.
+          </DrawerDescription>
+        </div>
+        <Button className="mr-8 shrink-0" onClick={() => void createCharacter()} size="sm">
+          <Plus aria-hidden="true" />
+          New
+        </Button>
+      </DrawerHeader>
 
-        <DrawerBody className="flex flex-col overflow-hidden md:grid md:grid-cols-[19rem_minmax(0,1fr)]">
-          <aside className="flex max-h-[42dvh] min-h-0 flex-col border-b border-border bg-muted/20 md:max-h-none md:border-r md:border-b-0">
-            <div className="space-y-3 border-b border-border p-3">
-              <div className="relative">
-                <Search
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  aria-label="Search characters"
-                  className="h-10 bg-background pl-9"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search name, role, location…"
-                  type="search"
-                  value={query}
-                />
-              </div>
-              <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-muted-foreground">
-                <span>Show hidden</span>
-                <span className="flex items-center gap-2">
-                  {hiddenCount > 0 ? <Badge variant="secondary">{hiddenCount}</Badge> : null}
-                  <input
-                    checked={showHidden}
-                    className="size-4 accent-primary"
-                    onChange={(event) => setShowHidden(event.target.checked)}
-                    type="checkbox"
-                  />
-                </span>
-              </label>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">
-              {status === "loading" ? (
-                <output className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-                  <LoaderCircle
-                    aria-hidden="true"
-                    className="size-4 animate-spin motion-reduce:animate-none"
-                  />
-                  Loading characters…
-                </output>
-              ) : null}
-              {status === "ready" && filteredCharacters.length === 0 ? (
-                <p className="p-4 text-sm leading-6 text-muted-foreground">
-                  {characters.length === 0
-                    ? "No characters yet. Create one to start the story bible."
-                    : "No characters match this view."}
-                </p>
-              ) : null}
-              <ul className="space-y-1" aria-label="Characters">
-                {filteredCharacters.map((character) => (
-                  <li key={character.id}>
-                    <button
-                      aria-current={draft?.id === character.id ? "true" : undefined}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                        draft?.id === character.id ? "bg-accent" : "hover:bg-muted",
-                      )}
-                      onClick={() => {
-                        if (!canDiscardDraft()) {
-                          return;
-                        }
-                        setDraft(character);
-                        setConfirmDelete(false);
-                        setSaveLabel("");
-                      }}
-                      type="button"
-                    >
-                      <CharacterAvatar bookId={bookId} character={character} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">
-                          {character.name}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {character.storyRole || "Role not set"}
-                        </span>
-                      </span>
-                      {character.hidden ? (
-                        <EyeOff aria-label="Hidden" className="size-3.5 text-muted-foreground" />
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </aside>
-
-          <section
-            className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"
-            aria-label="Character dossier"
-          >
-            {error ? (
-              <div
-                className="mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-                role="alert"
-              >
-                {error}
-              </div>
-            ) : null}
-            {status === "error" ? (
-              <section className="grid min-h-72 place-items-center text-center">
-                <div className="max-w-sm">
-                  <h3 className="font-heading text-lg font-semibold">Characters unavailable</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Check that browser storage is available, then close and reopen this tool.
-                  </p>
-                </div>
-              </section>
-            ) : null}
-            {status === "ready" && !draft ? (
-              <section className="grid min-h-72 place-items-center text-center">
-                <div className="max-w-sm">
-                  <UserRound aria-hidden="true" className="mx-auto mb-3 size-7 text-primary" />
-                  <h3 className="font-heading text-lg font-semibold">
-                    Create your first character
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Add a character, then develop their full dossier here.
-                  </p>
-                  <Button className="mt-4" onClick={() => void createCharacter()}>
-                    <Plus aria-hidden="true" />
-                    New character
-                  </Button>
-                </div>
-              </section>
-            ) : null}
-            {draft ? (
-              <CharacterDossier
-                bookId={bookId}
-                character={draft}
-                confirmDelete={confirmDelete}
-                isDirty={isDirty}
-                onCancelDelete={() => setConfirmDelete(false)}
-                onConfirmDelete={() => void deleteCharacter()}
-                onRequestDelete={() => setConfirmDelete(true)}
-                onSave={() => void saveCharacter()}
-                onToggleHidden={() => void toggleHidden(draft)}
-                onUpdate={updateDraft}
-                saveLabel={saveLabel}
+      <DrawerBody className="@container flex flex-col overflow-hidden @min-[44rem]:grid @min-[44rem]:grid-cols-[19rem_minmax(0,1fr)]">
+        <aside
+          className={cn(
+            "min-h-0 flex-1 flex-col border-b border-border bg-muted/20 @min-[44rem]:flex @min-[44rem]:max-h-none @min-[44rem]:border-r @min-[44rem]:border-b-0",
+            pane === "list" ? "flex" : "hidden",
+          )}
+        >
+          <div className="space-y-3 border-b border-border p-3">
+            <div className="relative">
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
               />
+              <Input
+                aria-label="Search characters"
+                className="h-10 bg-background pl-9"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search name, role, location…"
+                type="search"
+                value={query}
+              />
+            </div>
+            <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-muted-foreground">
+              <span>Show hidden</span>
+              <span className="flex items-center gap-2">
+                {hiddenCount > 0 ? <Badge variant="secondary">{hiddenCount}</Badge> : null}
+                <input
+                  checked={showHidden}
+                  className="size-4 accent-primary"
+                  onChange={(event) => setShowHidden(event.target.checked)}
+                  type="checkbox"
+                />
+              </span>
+            </label>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {status === "loading" ? (
+              <output className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin motion-reduce:animate-none"
+                />
+                Loading characters…
+              </output>
             ) : null}
-          </section>
-        </DrawerBody>
-      </DrawerContent>
-    </Drawer>
+            {status === "ready" && filteredCharacters.length === 0 ? (
+              <p className="p-4 text-sm leading-6 text-muted-foreground">
+                {characters.length === 0
+                  ? "No characters yet. Create one to start the story bible."
+                  : "No characters match this view."}
+              </p>
+            ) : null}
+            <ul className="space-y-1" aria-label="Characters">
+              {filteredCharacters.map((character) => (
+                <li key={character.id}>
+                  <button
+                    aria-current={draft?.id === character.id ? "true" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                      draft?.id === character.id ? "bg-accent" : "hover:bg-muted",
+                    )}
+                    onClick={() => {
+                      if (!canDiscardDraft()) {
+                        return;
+                      }
+                      setDraft(character);
+                      setPane("detail");
+                      setConfirmDelete(false);
+                      setSaveLabel("");
+                    }}
+                    type="button"
+                  >
+                    <CharacterAvatar bookId={bookId} character={character} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{character.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {character.storyRole || "Role not set"}
+                      </span>
+                    </span>
+                    {character.hidden ? (
+                      <EyeOff aria-label="Hidden" className="size-3.5 text-muted-foreground" />
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
+
+        <section
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 @min-[44rem]:block",
+            pane === "detail" ? "block" : "hidden",
+          )}
+          aria-label="Character dossier"
+        >
+          <Button
+            className="mb-4 @min-[44rem]:hidden"
+            onClick={() => {
+              if (!canDiscardDraft()) {
+                return;
+              }
+              setPane("list");
+              setConfirmDelete(false);
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <ArrowLeft aria-hidden="true" />
+            All characters
+          </Button>
+          {error ? (
+            <div
+              className="mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+              role="alert"
+            >
+              {error}
+            </div>
+          ) : null}
+          {status === "error" ? (
+            <section className="grid min-h-72 place-items-center text-center">
+              <div className="max-w-sm">
+                <h3 className="font-heading text-lg font-semibold">Characters unavailable</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Check that browser storage is available, then close and reopen this tool.
+                </p>
+              </div>
+            </section>
+          ) : null}
+          {status === "ready" && !draft ? (
+            <section className="grid min-h-72 place-items-center text-center">
+              <div className="max-w-sm">
+                <UserRound aria-hidden="true" className="mx-auto mb-3 size-7 text-primary" />
+                <h3 className="font-heading text-lg font-semibold">Create your first character</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Add a character, then develop their full dossier here.
+                </p>
+                <Button className="mt-4" onClick={() => void createCharacter()}>
+                  <Plus aria-hidden="true" />
+                  New character
+                </Button>
+              </div>
+            </section>
+          ) : null}
+          {draft ? (
+            <CharacterDossier
+              bookId={bookId}
+              character={draft}
+              confirmDelete={confirmDelete}
+              isDirty={isDirty}
+              onCancelDelete={() => setConfirmDelete(false)}
+              onConfirmDelete={() => void deleteCharacter()}
+              onRequestDelete={() => setConfirmDelete(true)}
+              onSave={() => void saveCharacter()}
+              onToggleHidden={() => void toggleHidden(draft)}
+              onUpdate={updateDraft}
+              saveLabel={saveLabel}
+            />
+          ) : null}
+        </section>
+      </DrawerBody>
+    </WorkspaceInspector>
   );
 }
 
@@ -408,7 +434,7 @@ function CharacterDossier({
         onSave();
       }}
     >
-      <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-4 border-b border-border pb-5 @min-[34rem]:flex-row @min-[34rem]:items-center">
         <CharacterAvatar bookId={bookId} character={character} large />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -433,7 +459,7 @@ function CharacterDossier({
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 @min-[34rem]:grid-cols-2">
         <Field htmlFor={`${prefix}-name`} label="Name">
           <Input
             id={`${prefix}-name`}

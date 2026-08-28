@@ -17,6 +17,9 @@ function fakeLinter() {
 
   return {
     languages: [] as string[],
+    dialects: [] as unknown[],
+    importedWords: [] as string[][],
+    clearedWords: 0,
     async setup() {},
     async lint(_text: string, options: { language: string }) {
       this.languages.push(options.language);
@@ -24,6 +27,15 @@ function fakeLinter() {
     },
     async applySuggestion(text: string) {
       return text.replace("teh", "the");
+    },
+    async setDialect(dialect: unknown) {
+      this.dialects.push(dialect);
+    },
+    async importWords(words: string[]) {
+      this.importedWords.push(words);
+    },
+    async clearWords() {
+      this.clearedWords += 1;
     },
     async ignoreLint() {},
     async dispose() {},
@@ -70,5 +82,21 @@ describe("Harper proofreading adapter", () => {
     expect(await service.check("teh", { format: "markdown", signal: controller.signal })).toEqual(
       [],
     );
+  });
+
+  test("configures Indian English and imports a deduplicated book vocabulary", async () => {
+    const linter = fakeLinter();
+    const service = new HarperProofreadingService({
+      linterFactory: async () => linter as never,
+    });
+
+    await service.initialize();
+    await service.setDialect("indian");
+    await service.clearWords();
+    await service.addWords(["boudi", " boudi ", "", "pujo"]);
+
+    expect(linter.dialects).toHaveLength(1);
+    expect(linter.clearedWords).toBe(1);
+    expect(linter.importedWords).toEqual([["boudi", "pujo"]]);
   });
 });

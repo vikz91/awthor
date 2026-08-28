@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LoaderCircle,
+  Maximize2,
   PenLine,
   RefreshCw,
   Settings2,
@@ -16,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   type ChangeEvent,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
@@ -24,15 +26,24 @@ import {
   useState,
 } from "react";
 import { AppTopBar } from "@/components/app-top-bar";
-import { SettingsDialog } from "@/components/settings-dialog";
+import { SettingsInspector } from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  formatMarkdownSelection,
+  type MarkdownSelectionFormat,
+  withLeadingMarkdownTitle,
+  withoutLeadingMarkdownTitle,
+} from "@/lib/markdown";
 import {
   type AppSettings,
   type Book,
+  type BookProofreadingSettings,
   type Chapter,
+  createDefaultBookProofreadingSettings,
   createManuscriptAutosave,
   getAwthorRepository,
   type ManuscriptAutosave,
+  resolveBookProofreadingSettings,
   type SaveState,
   type WorkspaceMode,
   type WorkspaceTool,
@@ -40,13 +51,23 @@ import {
 import { cn } from "@/lib/utils";
 import { BookFloatingToolbar } from "./book-floating-toolbar";
 import { ChapterChooser } from "./chapter-chooser";
+import { ChapterProgressRail } from "./chapter-progress-rail";
+import { FocusModeControls } from "./focus-mode-controls";
 import { EmptyManuscript, MarkdownManuscript } from "./markdown-manuscript";
+import { type SelectionFormatPosition, SelectionFormatToolbar } from "./selection-format-toolbar";
 
 type BookWorkspaceProps = {
   bookId: string;
 };
 
 type LoadState = "loading" | "ready" | "migration-error" | "storage-error" | "book-missing";
+
+type SelectionToolbarState = SelectionFormatPosition & {
+  selectionStart: number;
+  selectionEnd: number;
+};
+
+type FocusModeState = "off" | "pending" | "native" | "fallback";
 
 const toolValues = new Set<Exclude<WorkspaceTool, null>>(["spelling", "characters", "chapter-arc"]);
 
@@ -67,6 +88,11 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const [dirtyTool, setDirtyTool] = useState<Exclude<WorkspaceTool, null> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chapterChooserOpen, setChapterChooserOpen] = useState(false);
+  const [selectionToolbar, setSelectionToolbar] = useState<SelectionToolbarState | null>(null);
+  const [focusModeState, setFocusModeState] = useState<FocusModeState>("off");
+  const [proofreadingPreferences, setProofreadingPreferences] = useState<BookProofreadingSettings>(
+    createDefaultBookProofreadingSettings,
+  );
 
   const autosaveRef = useRef<ManuscriptAutosave | null>(null);
   const bookRef = useRef<Book | null>(null);
@@ -74,12 +100,25 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const currentChapterIdRef = useRef<string | null>(null);
   const settingsRef = useRef<AppSettings | null>(null);
   const settingsWriteTailRef = useRef<Promise<void>>(Promise.resolve());
+  const articleRef = useRef<HTMLElement>(null);
+  const workspaceRootRef = useRef<HTMLDivElement>(null);
+  const focusScrollRef = useRef<HTMLElement>(null);
+  const focusModeStateRef = useRef<FocusModeState>(focusModeState);
+  const focusEntryPositionRef = useRef(0);
+  const pendingFocusExitPositionRef = useRef<number | null>(null);
+  const fullscreenVerificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inspectorPositionRef = useRef<number | null>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const caretByChapterRef = useRef(new Map<string, { start: number; end: number }>());
   const focusEditorAfterModeChangeRef = useRef(false);
   const restoredInitialPositionRef = useRef(false);
   const scrollingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionRepositionFrameRef = useRef<number | null>(null);
   const closingOverlayRef = useRef<"tool" | "settings" | "chooser" | null>(null);
+  focusModeStateRef.current = focusModeState;
+
+  const focusMode = focusModeState !== "off";
 
   const currentChapter = chapters.find((chapter) => chapter.id === currentChapterId) ?? null;
   const currentChapterIndex = currentChapter
@@ -90,6 +129,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1
       ? chapters[currentChapterIndex + 1]
       : null;
+  const inspectorOpen = !focusMode && (activeTool !== null || settingsOpen);
 
   const updateBook = useCallback((nextBook: Book | null) => {
     bookRef.current = nextBook;
@@ -170,10 +210,17 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
 
         updateBook(nextBook);
         updateChapters(nextChapters);
+        setProofreadingPreferences(
+          resolveBookProofreadingSettings(data.settings, data.profile, bookId),
+        );
         currentChapterIdRef.current = selectedChapter?.id ?? null;
         setCurrentChapterId(selectedChapter?.id ?? null);
         setMissingChapterId(requestedChapter && !selectedChapter ? requestedChapter : null);
-        setDraft(selectedChapter?.body ?? "");
+        setDraft(
+          selectedChapter
+            ? withLeadingMarkdownTitle(selectedChapter.body, selectedChapter.title)
+            : "",
+        );
         setMode("read");
         setSaveState("clean");
         setActiveTool(query.tool);
@@ -256,13 +303,28 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     }
   }, []);
 
+  const currentScrollPosition = useCallback(() => {
+    if (focusModeStateRef.current !== "off" && focusScrollRef.current) {
+      return normalizedElementScrollPosition(focusScrollRef.current);
+    }
+    return normalizedScrollPosition();
+  }, []);
+
+  const restoreCurrentScrollPosition = useCallback((position: number) => {
+    if (focusModeStateRef.current !== "off" && focusScrollRef.current) {
+      restoreNormalizedElementScrollPosition(focusScrollRef.current, position);
+      return;
+    }
+    restoreNormalizedScrollPosition(position);
+  }, []);
+
   const rememberReadingPosition = useCallback(
     async (waitForWrite = false) => {
       if (!bookRef.current || !settingsRef.current) {
         return;
       }
 
-      const ratio = normalizedScrollPosition();
+      const ratio = currentScrollPosition();
       const write = patchSettings((current) => ({
         ...current,
         readingPositionByBook: {
@@ -285,7 +347,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         });
       }
     },
-    [bookId, patchSettings],
+    [bookId, currentScrollPosition, patchSettings],
   );
 
   useEffect(() => {
@@ -314,9 +376,12 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       }, 300);
     }
 
+    const focusScroller = focusScrollRef.current;
     window.addEventListener("scroll", handleScroll, { passive: true });
+    focusScroller?.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", handleScroll);
+      focusScroller?.removeEventListener("scroll", handleScroll);
       if (scrollingSaveTimerRef.current) {
         clearTimeout(scrollingSaveTimerRef.current);
         scrollingSaveTimerRef.current = null;
@@ -352,6 +417,130 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     textarea.setSelectionRange(caret.start, caret.end);
   }, []);
 
+  const dismissSelectionToolbar = useCallback(() => {
+    setSelectionToolbar(null);
+  }, []);
+
+  const syncSelectionToolbar = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (
+      !textarea ||
+      mode !== "write" ||
+      chapterChooserOpen ||
+      document.activeElement !== textarea
+    ) {
+      setSelectionToolbar(null);
+      return;
+    }
+
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+    if (
+      selectionStart === selectionEnd ||
+      textarea.value.slice(selectionStart, selectionEnd).trim().length === 0
+    ) {
+      setSelectionToolbar(null);
+      return;
+    }
+
+    const selectionRect = measureTextareaSelection(textarea, selectionStart, selectionEnd);
+    if (!selectionRect || selectionRect.bottom < 0 || selectionRect.top > window.innerHeight) {
+      setSelectionToolbar(null);
+      return;
+    }
+
+    const toolbarHalfWidth = 76;
+    const left = Math.min(
+      window.innerWidth - toolbarHalfWidth,
+      Math.max(toolbarHalfWidth, selectionRect.left + selectionRect.width / 2),
+    );
+    const placement = selectionRect.top >= 112 ? "above" : "below";
+    setSelectionToolbar({
+      left,
+      placement,
+      selectionEnd,
+      selectionStart,
+      top: placement === "above" ? selectionRect.top : selectionRect.bottom,
+    });
+  }, [chapterChooserOpen, mode]);
+
+  useEffect(() => {
+    if (!selectionToolbar) {
+      return;
+    }
+
+    function scheduleReposition() {
+      if (selectionRepositionFrameRef.current !== null) {
+        cancelAnimationFrame(selectionRepositionFrameRef.current);
+      }
+      selectionRepositionFrameRef.current = requestAnimationFrame(() => {
+        selectionRepositionFrameRef.current = null;
+        syncSelectionToolbar();
+      });
+    }
+
+    const textarea = textareaRef.current;
+    const focusScroller = focusScrollRef.current;
+    window.addEventListener("resize", scheduleReposition);
+    window.addEventListener("scroll", scheduleReposition, { passive: true });
+    focusScroller?.addEventListener("scroll", scheduleReposition, { passive: true });
+    textarea?.addEventListener("scroll", scheduleReposition, { passive: true });
+    return () => {
+      window.removeEventListener("resize", scheduleReposition);
+      window.removeEventListener("scroll", scheduleReposition);
+      focusScroller?.removeEventListener("scroll", scheduleReposition);
+      textarea?.removeEventListener("scroll", scheduleReposition);
+      if (selectionRepositionFrameRef.current !== null) {
+        cancelAnimationFrame(selectionRepositionFrameRef.current);
+        selectionRepositionFrameRef.current = null;
+      }
+    };
+  }, [selectionToolbar, syncSelectionToolbar]);
+
+  const applySelectionFormat = useCallback(
+    (format: MarkdownSelectionFormat) => {
+      const textarea = textareaRef.current;
+      if (!textarea || !selectionToolbar) {
+        return;
+      }
+
+      const result = formatMarkdownSelection(
+        textarea.value,
+        selectionToolbar.selectionStart,
+        selectionToolbar.selectionEnd,
+        format,
+      );
+      if (result.source === textarea.value) {
+        return;
+      }
+
+      applyUndoableTextareaValue(textarea, result.source);
+      setSelectionToolbar(null);
+      setDraft(result.source);
+      autosaveRef.current?.schedule(result.source);
+      const chapterId = currentChapterIdRef.current;
+      if (chapterId) {
+        caretByChapterRef.current.set(chapterId, {
+          start: result.selectionStart,
+          end: result.selectionEnd,
+        });
+      }
+
+      requestAnimationFrame(() => {
+        textarea.focus({ preventScroll: true });
+        textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
+        requestAnimationFrame(syncSelectionToolbar);
+      });
+    },
+    [selectionToolbar, syncSelectionToolbar],
+  );
+
+  useEffect(() => {
+    if (mode !== "write" || chapterChooserOpen) {
+      dismissSelectionToolbar();
+    }
+  }, [chapterChooserOpen, dismissSelectionToolbar, mode]);
+
   const confirmToolTransition = useCallback(
     (nextTool: WorkspaceTool = null) => {
       if (!activeTool || dirtyTool !== activeTool || nextTool === activeTool) {
@@ -384,22 +573,37 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         return;
       }
 
-      const scrollPosition = normalizedScrollPosition();
+      const scrollPosition = currentScrollPosition();
       captureCaret();
       if (!(await flushCurrentDraft())) {
         return;
       }
+      if (nextMode === "write") {
+        const chapter = chaptersRef.current.find((item) => item.id === currentChapterIdRef.current);
+        if (chapter) {
+          setDraft((current) => withLeadingMarkdownTitle(current, chapter.title));
+        }
+      }
+      dismissSelectionToolbar();
       focusEditorAfterModeChangeRef.current = focusEditor;
       setMode(nextMode);
       requestAnimationFrame(() => {
-        restoreNormalizedScrollPosition(scrollPosition);
+        restoreCurrentScrollPosition(scrollPosition);
         if (nextMode === "write" && focusEditorAfterModeChangeRef.current) {
           focusEditorAfterModeChangeRef.current = false;
           requestAnimationFrame(restoreEditorFocus);
         }
       });
     },
-    [captureCaret, flushCurrentDraft, mode, restoreEditorFocus],
+    [
+      captureCaret,
+      currentScrollPosition,
+      dismissSelectionToolbar,
+      flushCurrentDraft,
+      mode,
+      restoreCurrentScrollPosition,
+      restoreEditorFocus,
+    ],
   );
 
   useEffect(() => {
@@ -443,9 +647,10 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       await rememberReadingPosition(true);
       autosaveRef.current?.cancel();
       currentChapterIdRef.current = chapter.id;
+      dismissSelectionToolbar();
       setCurrentChapterId(chapter.id);
       setMissingChapterId(null);
-      setDraft(chapter.body);
+      setDraft(withLeadingMarkdownTitle(chapter.body, chapter.title));
       setSaveState("clean");
       setSaveError(null);
       restoredInitialPositionRef.current = true;
@@ -471,9 +676,17 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       })).catch(() => {
         setSaveError("The last opened chapter could not be remembered.");
       });
-      requestAnimationFrame(() => window.scrollTo({ top: 0 }));
+      requestAnimationFrame(() => restoreCurrentScrollPosition(0));
     },
-    [bookId, confirmToolTransition, flushCurrentDraft, patchSettings, rememberReadingPosition],
+    [
+      bookId,
+      confirmToolTransition,
+      dismissSelectionToolbar,
+      flushCurrentDraft,
+      patchSettings,
+      rememberReadingPosition,
+      restoreCurrentScrollPosition,
+    ],
   );
 
   const closeOverlayQuery = useCallback((overlay: "tool" | "settings" | "chooser") => {
@@ -493,6 +706,18 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     });
   }, []);
 
+  const preserveInspectorPosition = useCallback(() => {
+    const position = normalizedScrollPosition();
+    inspectorPositionRef.current = position;
+    requestAnimationFrame(() => {
+      if (inspectorPositionRef.current !== position) {
+        return;
+      }
+      inspectorPositionRef.current = null;
+      restoreNormalizedScrollPosition(position);
+    });
+  }, []);
+
   const handleToolChange = useCallback(
     async (tool: WorkspaceTool) => {
       if (!confirmToolTransition(tool)) {
@@ -502,6 +727,8 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       if (!(await flushCurrentDraft())) {
         return;
       }
+
+      preserveInspectorPosition();
 
       if (tool === activeTool) {
         setActiveTool(null);
@@ -518,7 +745,13 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         closeOverlayQuery("tool");
       }
     },
-    [activeTool, closeOverlayQuery, confirmToolTransition, flushCurrentDraft],
+    [
+      activeTool,
+      closeOverlayQuery,
+      confirmToolTransition,
+      flushCurrentDraft,
+      preserveInspectorPosition,
+    ],
   );
 
   const handleSettingsOpenChange = useCallback(
@@ -530,6 +763,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         if (!(await flushCurrentDraft())) {
           return;
         }
+        preserveInspectorPosition();
         setActiveTool(null);
         setChapterChooserOpen(false);
         setSettingsOpen(true);
@@ -537,10 +771,12 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         return;
       }
 
+      preserveInspectorPosition();
       setSettingsOpen(false);
       closeOverlayQuery("settings");
+      requestAnimationFrame(() => settingsButtonRef.current?.focus({ preventScroll: true }));
     },
-    [closeOverlayQuery, confirmToolTransition, flushCurrentDraft],
+    [closeOverlayQuery, confirmToolTransition, flushCurrentDraft, preserveInspectorPosition],
   );
 
   const handleChooserOpenChange = useCallback(
@@ -552,6 +788,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         if (!(await flushCurrentDraft())) {
           return;
         }
+        preserveInspectorPosition();
         setActiveTool(null);
         setSettingsOpen(false);
         setChapterChooserOpen(true);
@@ -559,11 +796,202 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         return;
       }
 
+      preserveInspectorPosition();
       setChapterChooserOpen(false);
       closeOverlayQuery("chooser");
     },
-    [closeOverlayQuery, confirmToolTransition, flushCurrentDraft],
+    [closeOverlayQuery, confirmToolTransition, flushCurrentDraft, preserveInspectorPosition],
   );
+
+  const clearFullscreenVerification = useCallback(() => {
+    if (fullscreenVerificationTimerRef.current) {
+      clearTimeout(fullscreenVerificationTimerRef.current);
+      fullscreenVerificationTimerRef.current = null;
+    }
+  }, []);
+
+  const finishFocusModeExit = useCallback(() => {
+    clearFullscreenVerification();
+    const position =
+      pendingFocusExitPositionRef.current ??
+      (focusScrollRef.current ? normalizedElementScrollPosition(focusScrollRef.current) : 0);
+    pendingFocusExitPositionRef.current = null;
+    focusModeStateRef.current = "off";
+    setFocusModeState("off");
+
+    requestAnimationFrame(() => {
+      restoreNormalizedScrollPosition(position);
+      if (mode === "write") {
+        requestAnimationFrame(restoreEditorFocus);
+      }
+    });
+  }, [clearFullscreenVerification, mode, restoreEditorFocus]);
+
+  const exitFocusMode = useCallback(async () => {
+    if (focusModeStateRef.current === "off") {
+      return;
+    }
+
+    captureCaret();
+    pendingFocusExitPositionRef.current = currentScrollPosition();
+    void flushCurrentDraft();
+    void rememberReadingPosition(true);
+
+    if (document.fullscreenElement === workspaceRootRef.current) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        finishFocusModeExit();
+      }
+      return;
+    }
+
+    finishFocusModeExit();
+  }, [
+    captureCaret,
+    currentScrollPosition,
+    finishFocusModeExit,
+    flushCurrentDraft,
+    rememberReadingPosition,
+  ]);
+
+  const enterFocusMode = useCallback(() => {
+    const workspaceRoot = workspaceRootRef.current;
+    if (
+      !workspaceRoot ||
+      !currentChapterIdRef.current ||
+      focusModeStateRef.current !== "off" ||
+      activeTool ||
+      settingsOpen ||
+      chapterChooserOpen
+    ) {
+      return;
+    }
+
+    captureCaret();
+    dismissSelectionToolbar();
+    focusEntryPositionRef.current = normalizedScrollPosition();
+    pendingFocusExitPositionRef.current = null;
+
+    let fullscreenRequest: Promise<void> | null = null;
+    if (document.fullscreenEnabled) {
+      try {
+        fullscreenRequest = workspaceRoot.requestFullscreen();
+      } catch {
+        fullscreenRequest = null;
+      }
+    }
+
+    void flushCurrentDraft();
+    void patchSettings((current) => ({
+      ...current,
+      readingPositionByBook: {
+        ...current.readingPositionByBook,
+        [bookId]: focusEntryPositionRef.current,
+      },
+    })).catch(() => {
+      setSaveError("The reading position could not be saved on this device.");
+    });
+
+    const nextState: FocusModeState = fullscreenRequest ? "pending" : "fallback";
+    focusModeStateRef.current = nextState;
+    setFocusModeState(nextState);
+
+    if (fullscreenRequest) {
+      fullscreenVerificationTimerRef.current = setTimeout(() => {
+        fullscreenVerificationTimerRef.current = null;
+        if (focusModeStateRef.current !== "off" && document.fullscreenElement !== workspaceRoot) {
+          focusModeStateRef.current = "fallback";
+          setFocusModeState("fallback");
+        }
+      }, 750);
+    }
+
+    fullscreenRequest
+      ?.then(() => {
+        if (focusModeStateRef.current === "off") {
+          return;
+        }
+        const resolvedState: FocusModeState =
+          document.fullscreenElement === workspaceRoot ? "native" : "fallback";
+        focusModeStateRef.current = resolvedState;
+        setFocusModeState(resolvedState);
+      })
+      .catch(() => {
+        clearFullscreenVerification();
+        if (focusModeStateRef.current !== "off") {
+          focusModeStateRef.current = "fallback";
+          setFocusModeState("fallback");
+        }
+      });
+  }, [
+    activeTool,
+    bookId,
+    captureCaret,
+    chapterChooserOpen,
+    clearFullscreenVerification,
+    dismissSelectionToolbar,
+    flushCurrentDraft,
+    patchSettings,
+    settingsOpen,
+  ]);
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      if (document.fullscreenElement === workspaceRootRef.current) {
+        focusModeStateRef.current = "native";
+        setFocusModeState("native");
+        return;
+      }
+
+      if (focusModeStateRef.current === "native") {
+        finishFocusModeExit();
+      }
+    }
+
+    function handleFullscreenError() {
+      if (focusModeStateRef.current !== "off") {
+        focusModeStateRef.current = "fallback";
+        setFocusModeState("fallback");
+      }
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("fullscreenerror", handleFullscreenError);
+    return () => {
+      clearFullscreenVerification();
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("fullscreenerror", handleFullscreenError);
+      if (document.fullscreenElement === workspaceRootRef.current) {
+        void document.exitFullscreen().catch(() => undefined);
+      }
+    };
+  }, [clearFullscreenVerification, finishFocusModeExit]);
+
+  useEffect(() => {
+    if (!focusMode) {
+      return;
+    }
+
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    const frame = requestAnimationFrame(() => {
+      if (focusScrollRef.current) {
+        restoreNormalizedElementScrollPosition(
+          focusScrollRef.current,
+          focusEntryPositionRef.current,
+        );
+      }
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [focusMode]);
 
   useEffect(() => {
     async function handlePopState() {
@@ -593,6 +1021,9 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         }
         return;
       }
+      if (overlayChanged) {
+        preserveInspectorPosition();
+      }
       setActiveTool(query.tool);
       setSettingsOpen(query.settingsOpen);
       setChapterChooserOpen(query.chapterChooserOpen);
@@ -608,6 +1039,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     chapterChooserOpen,
     confirmToolTransition,
     flushCurrentDraft,
+    preserveInspectorPosition,
     selectChapter,
     settingsOpen,
   ]);
@@ -615,6 +1047,18 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented) {
+        return;
+      }
+
+      if (
+        mode === "write" &&
+        selectionToolbar &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        (event.code === "KeyB" || event.code === "KeyI")
+      ) {
+        event.preventDefault();
+        applySelectionFormat(event.code === "KeyB" ? "bold" : "italic");
         return;
       }
 
@@ -647,7 +1091,14 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         return;
       }
 
-      if (activeTool) {
+      if (focusMode) {
+        event.preventDefault();
+        void exitFocusMode();
+      } else if (selectionToolbar) {
+        event.preventDefault();
+        dismissSelectionToolbar();
+        restoreEditorFocus();
+      } else if (activeTool) {
         event.preventDefault();
         void handleToolChange(null);
       } else if (chapterChooserOpen) {
@@ -666,13 +1117,19 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     activeTool,
+    applySelectionFormat,
     captureCaret,
     chapterChooserOpen,
+    dismissSelectionToolbar,
+    exitFocusMode,
     flushCurrentDraft,
+    focusMode,
     handleChooserOpenChange,
     handleSettingsOpenChange,
     handleToolChange,
     mode,
+    restoreEditorFocus,
+    selectionToolbar,
     settingsOpen,
     switchMode,
   ]);
@@ -691,8 +1148,22 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
 
   function changeDraft(event: ChangeEvent<HTMLTextAreaElement>) {
     const markdown = event.target.value;
+    setSelectionToolbar(null);
     setDraft(markdown);
     autosaveRef.current?.schedule(markdown);
+  }
+
+  function handleEditorSelection() {
+    captureCaret();
+    syncSelectionToolbar();
+  }
+
+  function handleEditorBlur(event: ReactFocusEvent<HTMLTextAreaElement>) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Element && nextTarget.closest("[data-selection-toolbar]")) {
+      return;
+    }
+    dismissSelectionToolbar();
   }
 
   function rememberCaretFromKeyboard(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
@@ -723,6 +1194,9 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     updateChapters(
       chaptersRef.current.map((chapter) => (chapter.id === updated.id ? updated : chapter)),
     );
+    if (updated.id === currentChapterIdRef.current) {
+      setDraft(updated.body);
+    }
   }
 
   async function moveChapter(chapterId: string, direction: -1 | 1) {
@@ -765,12 +1239,24 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     autosaveRef.current?.schedule(markdown);
   }
 
+  async function saveProofreadingPreferences(nextPreferences: BookProofreadingSettings) {
+    await patchSettings((current) => ({
+      ...current,
+      proofreadingByBook: {
+        ...current.proofreadingByBook,
+        [bookId]: nextPreferences,
+      },
+    }));
+    setProofreadingPreferences(nextPreferences);
+  }
+
   function updateChapterFromTool(updated: Chapter) {
     updateChapters(
       chaptersRef.current.map((chapter) => (chapter.id === updated.id ? updated : chapter)),
     );
-    if (updated.id === currentChapterIdRef.current && updated.body !== draft) {
-      setDraft(updated.body);
+    const nextDraft = withLeadingMarkdownTitle(updated.body, updated.title);
+    if (updated.id === currentChapterIdRef.current && nextDraft !== draft) {
+      setDraft(nextDraft);
     }
   }
 
@@ -816,120 +1302,159 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     : "No chapter selected";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <AppTopBar
-        center={
-          <div className="flex items-center gap-1">
-            <Button
-              aria-label="Previous chapter"
-              disabled={!previousChapter}
-              onClick={() => previousChapter && void selectChapter(previousChapter.id)}
-              size="icon-sm"
-              title="Previous chapter"
-              variant="ghost"
-            >
-              <ChevronLeft aria-hidden="true" />
-            </Button>
-            <Button
-              aria-label="Choose chapter"
-              className="max-w-[12rem] px-2 sm:max-w-[20rem]"
-              onClick={() => void handleChooserOpenChange(true)}
-              size="sm"
-              variant="ghost"
-            >
-              <span className="truncate">
-                <span className="hidden sm:inline">{chapterLabel} · </span>
-                {currentChapter?.title ?? "Chapters"}
-              </span>
-              <ChevronDown aria-hidden="true" />
-            </Button>
-            <Button
-              aria-label="Next chapter"
-              disabled={!nextChapter}
-              onClick={() => nextChapter && void selectChapter(nextChapter.id)}
-              size="icon-sm"
-              title="Next chapter"
-              variant="ghost"
-            >
-              <ChevronRight aria-hidden="true" />
-            </Button>
-          </div>
-        }
-        left={
-          <div className="flex min-w-0 items-center gap-1 sm:gap-3">
-            <Button
-              aria-label="Back to all books"
-              onClick={() => void navigateBack()}
-              size="icon-sm"
-              title="Back to all books"
-              variant="ghost"
-            >
-              <ArrowLeft aria-hidden="true" />
-            </Button>
-            <span className="hidden max-w-48 truncate text-sm font-medium lg:block">
-              {book.title}
-            </span>
-          </div>
-        }
-        right={
-          <div className="flex items-center gap-1.5">
-            <SaveIndicator
-              error={saveError}
-              onRetry={() => void flushCurrentDraft()}
-              state={saveState}
-            />
-            <div className="flex items-center rounded-xl border border-border bg-muted/40 p-0.5">
+    <div
+      className={cn(
+        "min-h-screen bg-background text-foreground",
+        focusMode && "h-dvh min-h-0 overflow-hidden",
+      )}
+      ref={workspaceRootRef}
+    >
+      {!focusMode ? (
+        <AppTopBar
+          center={
+            <div className="flex items-center gap-1">
               <Button
-                aria-keyshortcuts="Alt+R"
-                aria-pressed={mode === "read"}
-                className={cn("h-7 rounded-lg px-2", mode === "read" && "bg-background shadow-sm")}
-                onClick={() => void switchMode("read")}
-                size="sm"
-                title="Read (Alt/Option+R)"
+                aria-label="Previous chapter"
+                disabled={!previousChapter}
+                onClick={() => previousChapter && void selectChapter(previousChapter.id)}
+                size="icon-sm"
+                title="Previous chapter"
                 variant="ghost"
               >
-                <BookOpen aria-hidden="true" />
-                <span className="hidden xl:inline">Read</span>
+                <ChevronLeft aria-hidden="true" />
               </Button>
               <Button
-                aria-keyshortcuts="Alt+W"
-                aria-pressed={mode === "write"}
-                className={cn("h-7 rounded-lg px-2", mode === "write" && "bg-background shadow-sm")}
-                onClick={() => void switchMode("write", true)}
+                aria-label="Choose chapter"
+                className="max-w-[12rem] px-2 sm:max-w-[20rem]"
+                onClick={() => void handleChooserOpenChange(true)}
                 size="sm"
-                title="Write (Alt/Option+W)"
                 variant="ghost"
               >
-                <PenLine aria-hidden="true" />
-                <span className="hidden xl:inline">Write</span>
+                <span className="truncate">
+                  <span className="hidden sm:inline">{chapterLabel} · </span>
+                  {currentChapter?.title ?? "Chapters"}
+                </span>
+                <ChevronDown aria-hidden="true" />
+              </Button>
+              <Button
+                aria-label="Next chapter"
+                disabled={!nextChapter}
+                onClick={() => nextChapter && void selectChapter(nextChapter.id)}
+                size="icon-sm"
+                title="Next chapter"
+                variant="ghost"
+              >
+                <ChevronRight aria-hidden="true" />
               </Button>
             </div>
-            <Button
-              aria-label="Author and app settings"
-              onClick={() => void handleSettingsOpenChange(true)}
-              size="icon-sm"
-              title="Settings"
-              variant="ghost"
-            >
-              <Settings2 aria-hidden="true" />
-            </Button>
-          </div>
-        }
-      />
+          }
+          left={
+            <div className="flex min-w-0 items-center gap-1 sm:gap-3">
+              <Button
+                aria-label="Back to all books"
+                onClick={() => void navigateBack()}
+                size="icon-sm"
+                title="Back to all books"
+                variant="ghost"
+              >
+                <ArrowLeft aria-hidden="true" />
+              </Button>
+              <span className="hidden max-w-48 truncate text-sm font-medium lg:block">
+                {book.title}
+              </span>
+            </div>
+          }
+          right={
+            <div className="flex items-center gap-1.5">
+              <SaveIndicator
+                error={saveError}
+                onRetry={() => void flushCurrentDraft()}
+                state={saveState}
+              />
+              <div className="flex items-center rounded-xl border border-border bg-muted/40 p-0.5">
+                <Button
+                  aria-keyshortcuts="Alt+R"
+                  aria-pressed={mode === "read"}
+                  className={cn(
+                    "h-7 rounded-lg px-2",
+                    mode === "read" && "bg-background shadow-sm",
+                  )}
+                  onClick={() => void switchMode("read")}
+                  size="sm"
+                  title="Read (Alt/Option+R)"
+                  variant="ghost"
+                >
+                  <BookOpen aria-hidden="true" />
+                  <span className="hidden xl:inline">Read</span>
+                </Button>
+                <Button
+                  aria-keyshortcuts="Alt+W"
+                  aria-pressed={mode === "write"}
+                  className={cn(
+                    "h-7 rounded-lg px-2",
+                    mode === "write" && "bg-background shadow-sm",
+                  )}
+                  onClick={() => void switchMode("write", true)}
+                  size="sm"
+                  title="Write (Alt/Option+W)"
+                  variant="ghost"
+                >
+                  <PenLine aria-hidden="true" />
+                  <span className="hidden xl:inline">Write</span>
+                </Button>
+              </div>
+              <Button
+                aria-label="Enter focus mode"
+                disabled={!currentChapter}
+                onClick={enterFocusMode}
+                size="icon-sm"
+                title="Enter focus mode"
+                variant="ghost"
+              >
+                <Maximize2 aria-hidden="true" />
+              </Button>
+              <Button
+                aria-label="Author and app settings"
+                aria-pressed={settingsOpen}
+                onClick={() => void handleSettingsOpenChange(true)}
+                ref={settingsButtonRef}
+                size="icon-sm"
+                title="Settings"
+                variant="ghost"
+              >
+                <Settings2 aria-hidden="true" />
+              </Button>
+            </div>
+          }
+        />
+      ) : null}
 
-      <main className="mx-auto min-h-screen w-full max-w-[72rem] px-5 pt-28 pb-40 sm:px-8 sm:pt-32 lg:px-12">
+      <main
+        className={cn(
+          "mx-auto w-full px-5 sm:px-8 lg:px-12",
+          focusMode
+            ? "h-dvh min-h-0 max-w-none overflow-y-auto overscroll-contain pt-12 pb-32 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:pt-16"
+            : "min-h-screen max-w-[72rem] pt-28 pb-40 sm:pt-32",
+          inspectorOpen &&
+            "min-[72rem]:mr-[var(--workspace-inspector-width)] min-[72rem]:ml-auto min-[72rem]:max-w-[min(72rem,calc(100%-var(--workspace-inspector-width)))]",
+        )}
+        ref={focusScrollRef}
+      >
         {currentChapter ? (
           <article
             aria-label={`${chapterLabel}: ${currentChapter.title}`}
             className="mx-auto w-full max-w-[68ch]"
+            ref={articleRef}
           >
-            <header className="mb-10">
+            <header className={cn(mode === "read" ? "mb-10" : "mb-5")}>
               <p className="text-xs font-semibold tracking-[0.24em] text-muted-foreground uppercase">
                 {chapterLabel}
               </p>
-              <h1 className="mt-5 font-heading text-4xl leading-tight font-medium tracking-[-0.04em] sm:text-5xl">
-                {currentChapter.title}
-              </h1>
+              {mode === "read" ? (
+                <h1 className="mt-5 font-heading text-4xl leading-tight font-medium tracking-[-0.04em] sm:text-5xl">
+                  {currentChapter.title}
+                </h1>
+              ) : null}
             </header>
 
             <div
@@ -948,10 +1473,11 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                 <textarea
                   aria-label={`Markdown source for ${currentChapter.title}`}
                   className="field-sizing-content min-h-[62vh] w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-mono text-base leading-8 text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none sm:text-[1.05rem]"
+                  onBlur={handleEditorBlur}
                   onChange={changeDraft}
-                  onClick={captureCaret}
+                  onClick={handleEditorSelection}
                   onKeyUp={rememberCaretFromKeyboard}
-                  onSelect={captureCaret}
+                  onSelect={handleEditorSelection}
                   placeholder="# Begin this chapter…"
                   ref={textareaRef}
                   spellCheck
@@ -960,7 +1486,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
               )}
             </div>
 
-            {mode === "read" && (previousChapter || nextChapter) ? (
+            {mode === "read" && !focusMode && (previousChapter || nextChapter) ? (
               <nav
                 aria-label="Chapter navigation"
                 className="mt-20 flex items-center justify-between gap-4 border-t border-border pt-6"
@@ -996,13 +1522,26 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         )}
       </main>
 
-      {currentChapter ? (
+      {mode === "write" && selectionToolbar ? (
+        <SelectionFormatToolbar
+          onDismiss={dismissSelectionToolbar}
+          onFormat={applySelectionFormat}
+          position={selectionToolbar}
+        />
+      ) : null}
+
+      {currentChapter && mode === "read" && !focusMode ? (
+        <ChapterProgressRail inspectorOpen={inspectorOpen} targetRef={articleRef} />
+      ) : null}
+
+      {currentChapter && !focusMode ? (
         <BookFloatingToolbar
           activeTool={activeTool}
           bookId={book.id}
           chapters={chapters}
           currentChapterId={currentChapter.id}
           draft={draft}
+          inspectorOpen={inspectorOpen}
           mode={mode}
           onActiveToolChange={(tool: WorkspaceTool) => void handleToolChange(tool)}
           onApplyDraft={applyToolDraft}
@@ -1015,6 +1554,8 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           onRequestWrite={() => void switchMode("write", true)}
           onRestoreEditorFocus={restoreEditorFocus}
           onToolDirtyChange={handleToolDirtyChange}
+          onProofreadingPreferencesChange={saveProofreadingPreferences}
+          proofreadingPreferences={proofreadingPreferences}
         />
       ) : null}
 
@@ -1029,10 +1570,21 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         onSelect={selectChapter}
         open={chapterChooserOpen}
       />
-      <SettingsDialog
+      <SettingsInspector
         onOpenChange={(open) => void handleSettingsOpenChange(open)}
+        onSaved={(profile) => {
+          if (!settingsRef.current?.proofreadingByBook[bookId]) {
+            setProofreadingPreferences(
+              createDefaultBookProofreadingSettings(profile.defaultProofreadingDialect),
+            );
+          }
+        }}
         open={settingsOpen}
       />
+
+      {focusMode ? (
+        <FocusModeControls fallback={focusModeState === "fallback"} onExit={exitFocusMode} />
+      ) : null}
 
       <p aria-live="polite" className="sr-only">
         {saveState === "error"
@@ -1189,6 +1741,104 @@ function MissingChapter({
   );
 }
 
+const mirroredTextareaProperties = [
+  "border-bottom-width",
+  "border-left-width",
+  "border-right-width",
+  "border-top-width",
+  "box-sizing",
+  "font-family",
+  "font-size",
+  "font-style",
+  "font-variant",
+  "font-weight",
+  "letter-spacing",
+  "line-height",
+  "padding-bottom",
+  "padding-left",
+  "padding-right",
+  "padding-top",
+  "tab-size",
+  "text-align",
+  "text-indent",
+  "text-transform",
+  "word-spacing",
+] as const;
+
+function measureTextareaSelection(
+  textarea: HTMLTextAreaElement,
+  selectionStart: number,
+  selectionEnd: number,
+): DOMRect | null {
+  const textareaRect = textarea.getBoundingClientRect();
+  const computed = window.getComputedStyle(textarea);
+  const mirror = document.createElement("div");
+  const marker = document.createElement("span");
+
+  mirror.setAttribute("aria-hidden", "true");
+  Object.assign(mirror.style, {
+    height: `${textareaRect.height}px`,
+    left: `${textareaRect.left}px`,
+    overflow: "hidden",
+    overflowWrap: "break-word",
+    pointerEvents: "none",
+    position: "fixed",
+    top: `${textareaRect.top}px`,
+    visibility: "hidden",
+    whiteSpace: textarea.wrap === "off" ? "pre" : "pre-wrap",
+    width: `${textareaRect.width}px`,
+  });
+  for (const property of mirroredTextareaProperties) {
+    mirror.style.setProperty(property, computed.getPropertyValue(property));
+  }
+
+  const selectedFirstLine = textarea.value.slice(selectionStart, selectionEnd).split(/\r?\n/u)[0];
+  marker.textContent = selectedFirstLine || "\u200b";
+  mirror.append(document.createTextNode(textarea.value.slice(0, selectionStart)), marker);
+  document.body.append(mirror);
+  mirror.scrollTop = textarea.scrollTop;
+  mirror.scrollLeft = textarea.scrollLeft;
+
+  const markerRect = marker.getClientRects()[0] ?? marker.getBoundingClientRect();
+  mirror.remove();
+  return markerRect.width || markerRect.height ? markerRect : null;
+}
+
+/** Uses the browser's editing transaction so Cmd/Ctrl+Z can undo contextual formatting. */
+function applyUndoableTextareaValue(textarea: HTMLTextAreaElement, nextValue: string) {
+  const currentValue = textarea.value;
+  let prefixLength = 0;
+  while (
+    prefixLength < currentValue.length &&
+    prefixLength < nextValue.length &&
+    currentValue[prefixLength] === nextValue[prefixLength]
+  ) {
+    prefixLength += 1;
+  }
+
+  let suffixLength = 0;
+  while (
+    suffixLength < currentValue.length - prefixLength &&
+    suffixLength < nextValue.length - prefixLength &&
+    currentValue[currentValue.length - suffixLength - 1] ===
+      nextValue[nextValue.length - suffixLength - 1]
+  ) {
+    suffixLength += 1;
+  }
+
+  const replacementEnd = currentValue.length - suffixLength;
+  const replacement = nextValue.slice(prefixLength, nextValue.length - suffixLength);
+
+  textarea.focus({ preventScroll: true });
+  textarea.setSelectionRange(prefixLength, replacementEnd);
+
+  try {
+    document.execCommand("insertText", false, replacement);
+  } catch {
+    // The controlled value update below remains the fallback for unsupported browsers.
+  }
+}
+
 type QueryPatch = {
   chapter?: string | null;
   chooser?: "chapters" | null;
@@ -1256,11 +1906,19 @@ function normalizedScrollPosition(): number {
   return scrollableHeight === 0 ? 0 : Math.min(1, Math.max(0, window.scrollY / scrollableHeight));
 }
 
+function normalizedElementScrollPosition(element: HTMLElement): number {
+  const scrollableHeight = Math.max(element.scrollHeight - element.clientHeight, 0);
+  return scrollableHeight === 0
+    ? 0
+    : Math.min(1, Math.max(0, element.scrollTop / scrollableHeight));
+}
+
 function restoreNormalizedScrollPosition(position: number) {
   const scrollableHeight = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0);
   window.scrollTo({ top: scrollableHeight * Math.min(1, Math.max(0, position)) });
 }
 
-function withoutLeadingMarkdownTitle(source: string): string {
-  return source.replace(/^\s*#\s+[^\n]*(?:\r?\n)?/u, "").trimStart();
+function restoreNormalizedElementScrollPosition(element: HTMLElement, position: number) {
+  const scrollableHeight = Math.max(element.scrollHeight - element.clientHeight, 0);
+  element.scrollTo({ top: scrollableHeight * Math.min(1, Math.max(0, position)) });
 }

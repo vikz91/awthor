@@ -85,6 +85,7 @@
   --sidebar-accent-foreground: oklch(0.31 0.025 72);
   --sidebar-border: oklch(0.84 0.03 80);
   --sidebar-ring: oklch(0.56 0.065 120);
+  --workspace-inspector-width: clamp(22rem, 31vw, 28rem);
 }
 
 .stone {

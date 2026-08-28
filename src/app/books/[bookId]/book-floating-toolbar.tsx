@@ -6,7 +6,12 @@ import { ChapterArcDrawer } from "@/components/book-tools/chapter-arc-drawer";
 import { CharactersDrawer } from "@/components/book-tools/characters-drawer";
 import { FloatingToolbar, type FloatingToolbarItem } from "@/components/ui/floating-toolbar";
 import { countManuscript } from "@/lib/markdown";
-import type { Chapter, WorkspaceMode, WorkspaceTool } from "@/lib/repository";
+import type {
+  BookProofreadingSettings,
+  Chapter,
+  WorkspaceMode,
+  WorkspaceTool,
+} from "@/lib/repository";
 
 const ProofreadingDrawer = dynamic(
   () =>
@@ -21,6 +26,7 @@ type BookFloatingToolbarProps = {
   chapters: readonly Chapter[];
   currentChapterId: string;
   draft: string;
+  inspectorOpen: boolean;
   mode: WorkspaceMode;
   activeTool: WorkspaceTool;
   onActiveToolChange: (tool: WorkspaceTool) => void;
@@ -28,8 +34,10 @@ type BookFloatingToolbarProps = {
   onRequestWrite: () => void;
   onChapterUpdated: (chapter: Chapter) => void;
   onBeforeToolOpen: () => Promise<void>;
+  onProofreadingPreferencesChange: (preferences: BookProofreadingSettings) => Promise<void>;
   onToolDirtyChange: (tool: Exclude<WorkspaceTool, null>, dirty: boolean) => void;
   onRestoreEditorFocus: () => void;
+  proofreadingPreferences: BookProofreadingSettings;
 };
 
 export function BookFloatingToolbar({
@@ -38,14 +46,17 @@ export function BookFloatingToolbar({
   chapters,
   currentChapterId,
   draft,
+  inspectorOpen,
   mode,
   onActiveToolChange,
   onApplyDraft,
   onBeforeToolOpen,
   onChapterUpdated,
+  onProofreadingPreferencesChange,
   onRequestWrite,
   onRestoreEditorFocus,
   onToolDirtyChange,
+  proofreadingPreferences,
 }: BookFloatingToolbarProps) {
   const [announcement, setAnnouncement] = useState("Book tools ready.");
   const [openingTool, setOpeningTool] = useState<WorkspaceTool>(null);
@@ -54,7 +65,7 @@ export function BookFloatingToolbar({
   const counts = useMemo(() => countManuscript(draft), [draft]);
 
   useEffect(() => {
-    if (previousToolRef.current && !activeTool) {
+    if (previousToolRef.current && !activeTool && !inspectorOpen) {
       if (mode === "write") {
         onRestoreEditorFocus();
       } else {
@@ -66,7 +77,7 @@ export function BookFloatingToolbar({
       }
     }
     previousToolRef.current = activeTool;
-  }, [activeTool, mode, onRestoreEditorFocus]);
+  }, [activeTool, inspectorOpen, mode, onRestoreEditorFocus]);
 
   async function selectTool(tool: Exclude<WorkspaceTool, null>, label: string) {
     if (activeTool === tool) {
@@ -119,6 +130,7 @@ export function BookFloatingToolbar({
       icon: "SpellCheck2",
       onSelect: () => void selectTool("spelling", "Spell check"),
       pressed: activeTool === "spelling",
+      shortcut: "Alt+1",
       disabled: openingTool !== null,
       tooltip: "Spell check · runs locally",
     },
@@ -129,6 +141,7 @@ export function BookFloatingToolbar({
       icon: "Users",
       onSelect: () => void selectTool("characters", "Characters"),
       pressed: activeTool === "characters",
+      shortcut: "Alt+2",
       disabled: openingTool !== null,
       tooltip: "Characters · story bible",
     },
@@ -139,6 +152,7 @@ export function BookFloatingToolbar({
       icon: "ListTree",
       onSelect: () => void selectTool("chapter-arc", "Chapter arc"),
       pressed: activeTool === "chapter-arc",
+      shortcut: "Alt+3",
       disabled: openingTool !== null,
       tooltip: "Chapter arc · tension and outcomes",
     },
@@ -149,6 +163,7 @@ export function BookFloatingToolbar({
       icon: "LetterText",
       onSelect: toggleCounts,
       pressed: showCounts,
+      shortcut: "Alt+4",
       tooltip: showCounts ? "Hide word and character count" : "Show word and character count",
     },
   ];
@@ -174,6 +189,9 @@ export function BookFloatingToolbar({
         }
         announcement={announcement}
         autoHide
+        className={
+          inspectorOpen ? "min-[72rem]:right-[var(--workspace-inspector-width)]" : undefined
+        }
         collapsedLabel="Tools"
         heldOpen={activeTool !== null || openingTool !== null}
         items={items}
@@ -185,8 +203,10 @@ export function BookFloatingToolbar({
           mode={mode}
           onApplyDraft={onApplyDraft}
           onOpenChange={(open) => closeTool("spelling", open)}
+          onPreferencesChange={onProofreadingPreferencesChange}
           onRequestWrite={onRequestWrite}
           open
+          preferences={proofreadingPreferences}
         />
       ) : null}
       <CharactersDrawer
