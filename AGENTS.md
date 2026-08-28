@@ -66,7 +66,7 @@ a coherent user experience.
 ## Design for every app theme
 
 - Treat theme support as a default requirement for every new or updated component and page. Check
-  the interface in all supported themes, including light, paper, and dark, before handing it off.
+  the interface in both supported themes, Paper and Stone, before handing it off.
 - Use the existing semantic design tokens and theme-aware utilities for surfaces, text, borders,
   inputs, focus rings, muted states, accents, and destructive states—for example `bg-background`,
   `bg-card`, `text-foreground`, `text-muted-foreground`, `border-border`, and `text-primary`.

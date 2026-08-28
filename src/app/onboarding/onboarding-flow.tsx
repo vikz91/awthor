@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check, Feather, HardDrive, Moon, Sun } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Feather, HardDrive, Moon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
@@ -26,11 +26,10 @@ const themeOptions: Array<{
   value: Theme;
   label: string;
   description: string;
-  icon: typeof Sun;
+  icon: typeof Feather;
 }> = [
-  { value: "light", label: "Light", description: "Clean and bright", icon: Sun },
   { value: "paper", label: "Paper", description: "Warm and focused", icon: Feather },
-  { value: "dark", label: "Dark", description: "Gentle at night", icon: Moon },
+  { value: "stone", label: "Stone", description: "Low-glare and relaxed", icon: Moon },
 ];
 
 export function OnboardingFlow() {
@@ -184,7 +183,7 @@ export function OnboardingFlow() {
                 Choose a comfortable canvas for long writing sessions.
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-3">
+            <CardContent className="grid gap-3 sm:grid-cols-2">
               {themeOptions.map((option) => {
                 const active = theme === option.value;
                 return (

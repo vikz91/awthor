@@ -24,10 +24,10 @@ const repository = getAwthorRepository();
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
 
-  root.classList.remove(...themes);
+  root.classList.remove(...themes, "light", "dark");
   root.classList.add(theme);
   root.dataset.theme = theme;
-  root.style.colorScheme = theme === "dark" ? "dark" : "light";
+  root.style.colorScheme = theme === "stone" ? "dark" : "light";
 }
 
 type ThemeProviderProps = {

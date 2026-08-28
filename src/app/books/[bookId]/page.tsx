@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { BookFloatingToolbar } from "./book-floating-toolbar";
 
 const baseBook = {
   slug: "the-long-way-home",
@@ -198,7 +199,7 @@ export default async function BookDetailsPage({ params }: PageProps<"/books/[boo
   ] as const;
 
   return (
-    <main className="min-h-screen bg-background text-foreground transition-colors">
+    <main className="min-h-screen bg-background pb-28 text-foreground transition-colors">
       <header className="border-b border-border/70 bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-10">
           <Link
@@ -492,6 +493,12 @@ export default async function BookDetailsPage({ params }: PageProps<"/books/[boo
           </aside>
         </section>
       </div>
+      <BookFloatingToolbar
+        bookId={book.slug}
+        characterCount={book.charactersWithoutSpaces}
+        characterCountWithSpaces={book.charactersWithSpaces}
+        wordCount={book.words}
+      />
     </main>
   );
 }

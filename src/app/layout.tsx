@@ -6,19 +6,28 @@ import { cn } from "@/lib/utils";
 
 const themeScript = `
   (() => {
-    const themes = ["light", "dark", "paper"];
+    const themes = ["paper", "stone"];
     let theme = "paper";
 
     try {
       const savedTheme = localStorage.getItem("awthor-theme");
-      if (savedTheme && themes.includes(savedTheme)) theme = savedTheme;
+      const resolvedTheme =
+        savedTheme === "light" ? "paper" : savedTheme === "dark" ? "stone" : savedTheme;
+
+      if (resolvedTheme && themes.includes(resolvedTheme)) {
+        theme = resolvedTheme;
+
+        if (resolvedTheme !== savedTheme) {
+          localStorage.setItem("awthor-theme", resolvedTheme);
+        }
+      }
     } catch {}
 
     const root = document.documentElement;
-    root.classList.remove(...themes);
+    root.classList.remove(...themes, "light", "dark");
     root.classList.add(theme);
     root.dataset.theme = theme;
-    root.style.colorScheme = theme === "dark" ? "dark" : "light";
+    root.style.colorScheme = theme === "stone" ? "dark" : "light";
   })();
 `;
 

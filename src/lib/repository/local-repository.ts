@@ -125,7 +125,16 @@ class LocalThemeRepository implements ValueRepository<Theme> {
   async get(): Promise<Theme | null> {
     const raw = this.getStorage().getItem(themeStorageKey);
     const result = themeSchema.safeParse(raw);
-    return result.success ? result.data : null;
+
+    if (!result.success) {
+      return null;
+    }
+
+    if (raw !== result.data) {
+      await this.save(result.data);
+    }
+
+    return result.data;
   }
 
   async save(value: Theme): Promise<void> {

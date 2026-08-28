@@ -31,7 +31,7 @@ const features = [
     icon: MoonStar,
     title: "Comfortable in any light",
     description:
-      "Choose a light, paper, or dark writing space that feels comfortable whenever inspiration arrives.",
+      "Choose warm Paper or low-glare Stone for a comfortable writing space at any hour.",
   },
 ];
 

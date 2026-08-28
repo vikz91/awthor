@@ -1,7 +1,17 @@
 import { z } from "zod";
 
-export const themes = ["light", "dark", "paper"] as const;
-export const themeSchema = z.enum(themes);
+export const themes = ["paper", "stone"] as const;
+export const themeSchema = z.preprocess((value) => {
+  if (value === "light") {
+    return "paper";
+  }
+
+  if (value === "dark") {
+    return "stone";
+  }
+
+  return value;
+}, z.enum(themes));
 export type Theme = z.infer<typeof themeSchema>;
 
 export const onboardingDetailsSchema = z.object({
