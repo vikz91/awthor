@@ -87,7 +87,7 @@ export function useProofreading(text: string) {
     const timer = window.setTimeout(() => {
       void proofreading
         .check(text, {
-          format: "plaintext",
+          format: "markdown",
           deduplicate: true,
           signal: controller.signal,
         })
@@ -118,8 +118,8 @@ Aborting a check discards its result; it does not interrupt work already running
 worker. The abort guard in the completion callback prevents an older request from clearing newer
 results.
 
-For novel chapters, use `format: "plaintext"`. Use `markdown` or `typst` only when the source truly
-contains that markup.
+Awthor stores novel chapters as Markdown source, so manuscript checks use `format: "markdown"`.
+Use `plaintext` only for text that genuinely contains no Markdown syntax.
 
 ## Rendering issues
 

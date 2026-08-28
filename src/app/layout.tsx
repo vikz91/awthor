@@ -1,35 +1,10 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Nunito_Sans, Outfit } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { themeBootstrapScript } from "@/lib/repository";
 import { cn } from "@/lib/utils";
-
-const themeScript = `
-  (() => {
-    const themes = ["paper", "stone"];
-    let theme = "paper";
-
-    try {
-      const savedTheme = localStorage.getItem("awthor-theme");
-      const resolvedTheme =
-        savedTheme === "light" ? "paper" : savedTheme === "dark" ? "stone" : savedTheme;
-
-      if (resolvedTheme && themes.includes(resolvedTheme)) {
-        theme = resolvedTheme;
-
-        if (resolvedTheme !== savedTheme) {
-          localStorage.setItem("awthor-theme", resolvedTheme);
-        }
-      }
-    } catch {}
-
-    const root = document.documentElement;
-    root.classList.remove(...themes, "light", "dark");
-    root.classList.add(theme);
-    root.dataset.theme = theme;
-    root.style.colorScheme = theme === "stone" ? "dark" : "light";
-  })();
-`;
 
 const outfitHeading = Outfit({
   subsets: ["latin"],
@@ -110,7 +85,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       )}
     >
       <head>
-        <script>{themeScript}</script>
+        <Script id="awthor-theme" strategy="beforeInteractive">
+          {themeBootstrapScript}
+        </Script>
       </head>
       <body className="flex min-h-full flex-col">
         <ThemeProvider>{children}</ThemeProvider>

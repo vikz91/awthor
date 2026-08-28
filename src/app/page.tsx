@@ -19,7 +19,7 @@ const features = [
     icon: Focus,
     title: "A focused writing room",
     description:
-      "A calm, distraction-free editor that keeps your chapters, notes, and momentum in one place.",
+      "Read and write in one calm manuscript view, with no dashboards or page changes in the way.",
   },
   {
     icon: BookOpenText,
@@ -44,7 +44,7 @@ export default function Home() {
             className="flex items-center gap-2.5 font-heading text-xl font-semibold tracking-tight"
             href="/"
           >
-            <BrandMark className="shadow-[0_6px_18px_rgba(35,35,31,0.18)]" />
+            <BrandMark className="shadow-lg shadow-foreground/10" />
             awthor
           </Link>
 
@@ -72,7 +72,7 @@ export default function Home() {
             </Link>
             <Link
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-foreground/10 transition hover:-translate-y-0.5 hover:bg-primary/90"
-              href="/onboarding"
+              href="/books"
             >
               Start writing
               <ArrowRight aria-hidden="true" className="size-4" />
@@ -105,7 +105,7 @@ export default function Home() {
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link
                   className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-xl shadow-foreground/10 transition hover:-translate-y-0.5 hover:bg-primary/90"
-                  href="/onboarding"
+                  href="/books"
                 >
                   Start your first book
                   <ArrowRight aria-hidden="true" className="size-4" />
@@ -138,9 +138,9 @@ export default function Home() {
               <div className="overflow-hidden rounded-[1.7rem] border border-border bg-card shadow-2xl shadow-foreground/10">
                 <div className="flex items-center justify-between border-b border-border bg-card/70 px-5 py-4">
                   <div className="flex items-center gap-2">
-                    <span className="size-2.5 rounded-full bg-[#d8a18e]" />
-                    <span className="size-2.5 rounded-full bg-[#dfc77f]" />
-                    <span className="size-2.5 rounded-full bg-[#9eb48d]" />
+                    <span className="size-2.5 rounded-full bg-primary" />
+                    <span className="size-2.5 rounded-full bg-secondary" />
+                    <span className="size-2.5 rounded-full bg-foreground" />
                   </div>
                   <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                     Saved on this device
@@ -243,7 +243,7 @@ export default function Home() {
             className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:gap-3"
             href="/books"
           >
-            Explore the demo library
+            Open your local library
             <ArrowRight aria-hidden="true" className="size-4" />
           </Link>
         </section>
@@ -333,7 +333,7 @@ export default function Home() {
                 </li>
                 <li>
                   <Link className="transition-colors hover:text-foreground" href="/books">
-                    Demo library
+                    Your library
                   </Link>
                 </li>
               </ul>

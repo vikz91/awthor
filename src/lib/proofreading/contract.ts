@@ -46,7 +46,7 @@ export interface ProofreadingIssue {
 }
 
 export interface ProofreadingCheckOptions {
-  /** The source format. Novel content should normally use `plaintext`. */
+  /** The source format. Awthor manuscripts use `markdown`. */
   format?: ProofreadingFormat;
   /** Remove overlapping issues. Defaults to true. */
   deduplicate?: boolean;

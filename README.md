@@ -1,6 +1,6 @@
 # Awthor
 
-> A simple, focused web app for planning, writing, and finishing novels.
+> A free, open-source, local-first novel writing app.
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.3.3-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.2.8-149ECA?logo=react&logoColor=white)](https://react.dev/)
@@ -9,152 +9,184 @@
 [![Bun](https://img.shields.io/badge/Bun-1.4.0-000000?logo=bun&logoColor=white)](https://bun.sh/)
 [![Node.js](https://img.shields.io/badge/Node.js-24.x-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Biome](https://img.shields.io/badge/Biome-2.4.2-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
+[![Harper](https://img.shields.io/badge/Proofreading-Harper.js-D97706)](https://writewithharper.com/)
+[![Markdown](https://img.shields.io/badge/Editor-GFM-000000?logo=markdown&logoColor=white)](https://github.github.com/gfm/)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-4D7C0F?logo=gnu&logoColor=white)](LICENSE)
 ![Storage](https://img.shields.io/badge/Manuscript_Storage-Your_Device-5F6B4E)
 
-Awthor is a completely free and open-source, local-first writing app for novelists. The hosted
-version is designed to keep manuscripts on the writer's computer instead of storing them in an
-Awthor server database.
+Awthor is a deliberately minimal writing workspace. The hosted application does not store
+manuscripts in an Awthor server database: books, chapters, characters, settings, and reading
+positions remain in the current browser through a repository-backed local storage layer.
 
-The current v1 is a polished, responsive front-end prototype with a marketing landing page and a
-demo writing library. It is intentionally mock-data-first so product flows and visual direction
-can be tested before client-side persistence and the editor are implemented.
+There is no pricing tier. Awthor is completely free and distributed under the
+[GNU Affero General Public License v3.0](LICENSE).
 
-## Current pages
+## Four screens
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Marketing landing page with product positioning, an editor preview, features, and calls to action |
-| `/onboarding` | Single-step author name, email, website, theme, and local-storage setup |
-| `/books` | Local library with manuscript statistics and four demo novels |
-| `/books/[bookId]` | Book overview with metadata, preface, series information, and manuscript statistics |
-| `/books/[bookId]/chapters` | Searchable chapter workspace with editable manuscript content and metadata |
-| `/books/[bookId]/characters` | Interactive mock character roster with editable dossiers and add, hide, and delete actions |
-| `/books/[bookId]/plots` | Plot-thread workspace with story beats, stakes, and character connections |
-| `/books/[bookId]/notes` | Searchable story notebook with categories, pinning, and archiving |
-| `/test` | Local-data lab for seeding, clearing, importing, and exporting browser data |
+| `/` | Minimal landing page with product, privacy, and open-source positioning |
+| `/books` | Searchable, cover-first local library with book and author settings dialogs |
+| `/books/[bookId]` | Unified Markdown reader/writer with chapters and in-place writing tools |
+| `/test` | Local repository diagnostics for seeding, clearing, importing, and exporting data |
+
+Retired URLs remain compatible through temporary redirects:
+
+- `/onboarding` → `/books?settings=open`
+- `/books/:bookId/chapters` → `/books/:bookId?chooser=chapters`
+- `/books/:bookId/characters` → `/books/:bookId?tool=characters`
+- `/books/:bookId/plots` → `/books/:bookId?tool=chapter-arc`
+- `/books/:bookId/notes` → `/books/:bookId`
+
+## Writing workspace
+
+Books always open in Read mode at the last chapter and saved reading position. Write mode edits the
+same chapter as Markdown source and autosaves through `AwthorRepository`; switching modes does not
+navigate or load another page. Read mode supports GitHub Flavored Markdown, including headings,
+lists, task lists, tables, links, quotes, code, strikethrough, and remote images. Raw HTML is not
+rendered.
+
+The existing floating toolbar contains four in-place controls:
+
+- **Spell check** — local spelling, grammar, and style feedback from Harper.js
+- **Characters** — searchable character list and editable dossier
+- **Chapter arc** — per-chapter stage, tension, goal, conflict, and outcome
+- **Counts** — toggles a live word and character count for the current chapter
+
+On desktop the toolbar reveals near the bottom edge, remains available while focused or a tool is
+open, and automatically collapses to a visible Tools cue. Moving near the bottom edge, clicking the
+cue, or using the keyboard shortcut reveals it again. Touch users receive a persistent compact
+control above the safe area. Reduced-motion preferences are respected.
+
+Keyboard shortcuts:
+
+| Shortcut | Action |
+| --- | --- |
+| `Alt/Option + W` | Enter Write mode |
+| `Alt/Option + R` | Return to Read mode |
+| `Alt/Option + T` | Reveal and focus the writing tools |
+| `Ctrl/Cmd + S` | Save the current manuscript immediately |
+| `Escape` | Close the active overlay, or return to Read |
+
+Every shortcut has a visible control.
+
+## Local-first data and privacy
+
+`AwthorRepository` is the only product data boundary; pages and components never access browser
+storage directly. Storage schema v2 contains books, Markdown chapters, characters, author settings,
+Paper/Stone theme choice, and per-book reading state. Import/export uses a portable v2 JSON backup.
+
+A safe v1 migration preserves supported books, chapters, characters, profile, theme, and settings.
+Legacy Notes and Plot records are intentionally discarded only after all v2 writes succeed. If a
+migration fails, the v1 records remain untouched and the interface offers Retry.
+
+Harper proofreading loads only when requested and runs inside the browser. Manuscript and profile
+text are never sent to Harper or Awthor servers.
+
+Remote cover and Markdown image URLs are optional. Loading one contacts that image host, so the host
+can receive normal request metadata such as the visitor's IP address even though the manuscript and
+profile remain on-device. Images are protocol-restricted, lazy-loaded, responsive, and requested
+without a referrer. Character dossiers also use deterministic default portraits from
+`i.pravatar.cc` until the author supplies another image URL, so opening Characters contacts that
+host under the same rules.
+
+Because data belongs to one browser origin, export backups regularly before clearing site data,
+changing browsers, or moving devices.
+
+## Themes
+
+Awthor supports two token-driven themes:
+
+- **Paper** — warm, bright paper for drafting and reading
+- **Stone** — a dark paper theme for relaxed low-light reading
+
+Components use semantic CSS tokens for surfaces, text, borders, focus, accent, and destructive
+states so both themes retain the same layout and accessible interaction states.
 
 ## Tech stack
 
 | Area | Technology | Use |
 | --- | --- | --- |
-| Framework | [Next.js 16](https://nextjs.org/) App Router | Routing, layouts, metadata, server rendering, and production builds |
-| UI runtime | [React 19](https://react.dev/) | Component model and rendering |
-| Language | [TypeScript 5](https://www.typescriptlang.org/) | Strict static typing |
-| Styling | [Tailwind CSS 4](https://tailwindcss.com/) | Utility-first responsive styling and design tokens |
-| Component system | [shadcn](https://ui.shadcn.com/) + [Base UI](https://base-ui.com/) | Accessible, locally owned UI primitives |
-| Variants and class composition | [CVA](https://cva.style/), [clsx](https://github.com/lukeed/clsx), and [tailwind-merge](https://github.com/dcastil/tailwind-merge) | Reusable variants and conflict-safe class composition |
-| Motion | [tw-animate-css](https://github.com/Wombosvideo/tw-animate-css) + [Motion Icons](https://www.npmjs.com/package/motion-icons-react) | Animation utilities and animated icon support |
-| Icons | [Lucide React](https://lucide.dev/) | Interface iconography |
-| Validation | [Zod 4](https://zod.dev/) | Runtime validation for local repository data and backups |
-| Fonts | [`next/font`](https://nextjs.org/docs/app/getting-started/fonts) | Self-hosted Outfit, Nunito Sans, and Geist Mono |
+| Framework | [Next.js 16](https://nextjs.org/) App Router | Routes, metadata, redirects, server/client boundaries, and builds |
+| UI runtime | [React 19](https://react.dev/) | Component rendering and client workspace state |
+| Language | [TypeScript 5](https://www.typescriptlang.org/) | Strict application, repository, and service contracts |
+| Styling | [Tailwind CSS 4](https://tailwindcss.com/) | Responsive utilities and semantic design tokens |
+| Components | [shadcn](https://ui.shadcn.com/) + [Base UI](https://base-ui.com/) | Accessible, locally owned primitives and drawers/dialogs |
+| Markdown | [`react-markdown`](https://github.com/remarkjs/react-markdown) + [`remark-gfm`](https://github.com/remarkjs/remark-gfm) | Safe Markdown and GFM rendering without raw HTML |
+| Proofreading | [Harper.js](https://writewithharper.com/) | Lazy, worker-backed, on-device writing feedback |
+| Validation | [Zod 4](https://zod.dev/) | Runtime validation and backup/migration parsing |
+| Icons | [Lucide React](https://lucide.dev/) + [Motion Icons](https://www.npmjs.com/package/motion-icons-react) | Interface iconography |
+| Class composition | [CVA](https://cva.style/), `clsx`, and `tailwind-merge` | Reusable variants and conflict-safe classes |
 | Compiler | [React Compiler](https://react.dev/learn/react-compiler) | Automatic component optimization |
-| Tooling | [Bun](https://bun.sh/) | Package manager and local script runtime |
-| Production runtime | [Node.js 24](https://nodejs.org/) | Stable Vercel builds and Functions runtime |
-| Quality | [Biome](https://biomejs.dev/) | Formatting, linting, import organization, React, and Next.js rules |
-| CSS pipeline | [PostCSS](https://postcss.org/) | Tailwind CSS compilation |
-| Deployment | [Vercel](https://vercel.com/) | Next.js hosting configuration through `vercel.json` |
-
-## Local-first data and privacy
-
-- The hosted interface runs in the writer's browser.
-- Manuscripts and project data belong in client-side storage on the writer's computer.
-- The hosted deployment does not use an Awthor-owned server database for manuscript content.
-- The current prototype uses static demo data; browser persistence is the next implementation
-  milestone.
-- Import, export, and backup tools will be important because local data does not automatically
-  follow a writer to another browser or device.
+| Local tooling | [Bun](https://bun.sh/) | Dependency installation, dev scripts, and unit tests |
+| Production runtime | [Node.js 24](https://nodejs.org/) | Stable Vercel production builds |
+| Quality | [Biome](https://biomejs.dev/) | Formatting, linting, accessibility, React, and Next.js checks |
+| Deployment | [Vercel](https://vercel.com/) | Static/application hosting through `vercel.json` |
 
 ## Getting started
 
 Requirements:
 
 - [Bun 1.4+](https://bun.sh/docs/installation)
-- [Node.js 24](https://nodejs.org/) for parity with the production build runtime
-
-Install dependencies and start the development server:
+- [Node.js 24](https://nodejs.org/) for production-build parity
 
 ```bash
 bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Visit `/test` and choose **Seed or replace** to
+load the bundled Markdown demo workspace.
 
 ## Scripts
 
 | Command | Description |
 | --- | --- |
 | `bun dev` | Start the Next.js development server with Bun |
-| `bun run build` | Create an optimized production build |
-| `bun start` | Serve the production build |
-| `bun run lint` | Run Biome checks across the project |
 | `bun run format` | Format supported files with Biome |
+| `bun run lint` | Run Biome checks across the project |
+| `bun test` | Run repository, migration, Markdown, autosave, and proofreading unit tests |
+| `bun run build` | Create the standard optimized production build |
+| `node node_modules/next/dist/bin/next build` | Run the Node 24 Vercel-equivalent build |
+| `bun start` | Serve a completed production build |
 
-## Project structure
+Recommended local verification:
+
+```bash
+bun run format
+bun run lint
+bun test
+bun run build
+node node_modules/next/dist/bin/next build
+git diff --check
+```
+
+## Architecture
 
 ```text
 src/
 ├── app/
-│   ├── books/page.tsx   # Demo book library
-│   ├── globals.css      # Tailwind imports and global design tokens
-│   ├── layout.tsx       # Fonts, metadata, and social preview config
-│   └── page.tsx         # Marketing landing page
-├── components/ui/       # shadcn/Base UI components
-└── lib/utils.ts         # Shared class-name helper
-
-biome.json               # Formatter and linter rules
-components.json          # shadcn configuration
-next.config.ts           # Next.js and React Compiler settings
-vercel.json              # Bun install and Node.js Vercel build configuration
+│   ├── books/[bookId]/       # Unified Read/Write workspace and tool composition
+│   ├── books/                # Repository-backed local library
+│   ├── test/                 # Repository diagnostics and v2 fixture controls
+│   ├── globals.css           # Paper/Stone semantic tokens
+│   └── page.tsx              # Landing screen
+├── components/
+│   ├── book-tools/           # Spell check, Characters, and Chapter arc drawers
+│   └── ui/floating-toolbar.tsx
+└── lib/
+    ├── markdown/             # Counting and URL-safety helpers
+    ├── proofreading/         # Engine-neutral service plus Harper adapter
+    └── repository/           # Product data contract, v2 storage, migration, autosave, seed
 ```
 
-## Code quality
+`next.config.ts` owns legacy redirects, `biome.json` owns formatting and lint rules,
+`vercel.json` pins the frozen Bun install and Node production build, and `AGENTS.md` records local
+development and theme requirements for coding agents.
 
-Biome is configured with recommended JavaScript/TypeScript rules plus the React and Next.js
-domains. It also enforces unused-code cleanup, type-only imports, exhaustive hook dependencies,
-safe non-null handling, consistent formatting, and automatic import organization.
-
-Run the full local quality pass with:
-
-```bash
-bun run lint
-bun run build
-```
-
-## Deploying to Vercel
-
-Import the repository into Vercel. The included `vercel.json` selects Next.js, installs the frozen
-lockfile with Bun 1.4, and runs production builds and Functions on Node.js 24.
-
-Vercel hosts the application files and interface only. Awthor does not require a server-side
-manuscript database; writing data is intended to remain in browser storage on the user's device.
-
-Set `NEXT_PUBLIC_SITE_URL` to the final production origin, for example
-`https://awthor.example.com`, so absolute social-sharing metadata uses the deployed URL.
-
-## v1 scope
-
-Included now:
-
-- Responsive landing page
-- Author onboarding and theme setup
-- Responsive shadcn-based book library
-- Book metadata and series overview
-- Interactive character roster and editor
-- Demo manuscript and chapter data
-- Page metadata and branded social preview
-- Vercel and Biome configuration
-
-Natural next steps:
-
-- Client-side persistence for books, chapters, and notes
-- Distraction-free manuscript editor
-- On-device autosave and version history
-- Export to DOCX, PDF, and EPUB
-- Import, backup, and restore flows
-- Offline/PWA support
+Set `NEXT_PUBLIC_SITE_URL` to the deployed origin so social metadata uses the correct absolute URL.
+No server-side manuscript database or pricing configuration is required.
 
 ## License
 

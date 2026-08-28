@@ -14,5 +14,15 @@ export function getAwthorRepository(): AwthorRepository {
   return repository;
 }
 
-export type { AwthorRepository } from "./contract";
+export * from "./contract";
+export {
+  legacyRepositoryPrefix,
+  RepositoryStorageError,
+  repositoryPrefix,
+  repositorySchemaVersion,
+  themeStorageKey,
+} from "./local-repository";
+export * from "./manuscript-autosave";
 export * from "./models";
+export { createSeedRepositoryData, seedRepositorySummary } from "./seed-data";
+export { themeBootstrapScript } from "./theme-bootstrap";

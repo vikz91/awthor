@@ -15,29 +15,25 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  awthorStoragePrefix,
-  backupFormat,
-  backupVersion,
-  createBackup,
-  createSeedStorageEntries,
-  seedSummary,
-} from "./seed-data";
-
-const backupSchema = z.object({
-  format: z.literal(backupFormat),
-  version: z.literal(backupVersion),
-  exportedAt: z.string(),
-  entries: z.record(z.string(), z.string()),
-});
+  type AwthorBackupV2,
+  awthorBackupFormat,
+  awthorBackupVersion,
+  createSeedRepositoryData,
+  getAwthorRepository,
+  type RepositoryData,
+  seedRepositorySummary,
+} from "@/lib/repository";
 
 type Inventory = {
-  entries: Record<string, string>;
+  books: number;
+  chapters: number;
+  characters: number;
   bytes: number;
+  hasData: boolean;
 };
 
 type Notice = {
@@ -45,51 +41,33 @@ type Notice = {
   text: string;
 };
 
-const emptyInventory: Inventory = { entries: {}, bytes: 0 };
-const initialPreview = JSON.stringify(
-  createBackup(createSeedStorageEntries(), "2026-08-28T09:30:00.000Z"),
-  null,
-  2,
-);
+const emptyInventory: Inventory = {
+  books: 0,
+  chapters: 0,
+  characters: 0,
+  bytes: 0,
+  hasData: false,
+};
+const seedPreviewBackup: AwthorBackupV2 = {
+  format: awthorBackupFormat,
+  version: awthorBackupVersion,
+  exportedAt: "2026-08-28T09:30:00.000Z",
+  data: createSeedRepositoryData(),
+};
+const initialPreview = JSON.stringify(seedPreviewBackup, null, 2);
 
-function isAwthorStorageKey(key: string) {
-  return key === "awthor-theme" || key.startsWith(`${awthorStoragePrefix}:`);
-}
+function inventoryFrom(data: RepositoryData): Inventory {
+  const serialized = JSON.stringify(data);
 
-function readAwthorEntries(): Record<string, string> {
-  const entries: Record<string, string> = {};
-
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (key && isAwthorStorageKey(key)) {
-      const value = window.localStorage.getItem(key);
-      if (value !== null) {
-        entries[key] = value;
-      }
-    }
-  }
-
-  return Object.fromEntries(
-    Object.entries(entries).sort(([first], [second]) => first.localeCompare(second)),
-  );
-}
-
-function clearAwthorEntries() {
-  for (const key of Object.keys(readAwthorEntries())) {
-    window.localStorage.removeItem(key);
-  }
-}
-
-function writeEntries(entries: Record<string, string>) {
-  for (const [key, value] of Object.entries(entries)) {
-    window.localStorage.setItem(key, value);
-  }
-}
-
-function inventoryFrom(entries: Record<string, string>): Inventory {
   return {
-    entries,
-    bytes: new Blob(Object.entries(entries).flat()).size,
+    books: data.books.length,
+    chapters: Object.values(data.chapters).reduce((total, chapters) => total + chapters.length, 0),
+    characters: Object.values(data.characters).reduce(
+      (total, characters) => total + characters.length,
+      0,
+    ),
+    bytes: new Blob([serialized]).size,
+    hasData: data.profile !== null || data.books.length > 0,
   };
 }
 
@@ -105,21 +83,17 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-function downloadBackup(entries: Record<string, string>) {
-  const backup = createBackup(entries);
+function downloadBackup(backup: AwthorBackupV2) {
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  const date = backup.exportedAt.slice(0, 10);
 
   anchor.href = url;
-  anchor.download = `awthor-backup-${date}.json`;
+  anchor.download = `awthor-backup-${backup.exportedAt.slice(0, 10)}.json`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
-
-  return backup;
 }
 
 export function TestDataWorkspace() {
@@ -129,29 +103,50 @@ export function TestDataWorkspace() {
   const [previewLabel, setPreviewLabel] = useState("Seed preview");
   const [notice, setNotice] = useState<Notice>({
     tone: "neutral",
-    text: "Reading this browser's Awthor storage…",
+    text: "Reading this browser's Awthor repository…",
   });
   const [isReady, setIsReady] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [canRetryMigration, setCanRetryMigration] = useState(false);
 
-  const refreshInventory = useCallback((message?: string) => {
+  const refreshInventory = useCallback(async (message?: string, retryMigration = false) => {
+    const repository = getAwthorRepository();
+
     try {
-      const entries = readAwthorEntries();
-      setInventory(inventoryFrom(entries));
-      setPreview(JSON.stringify(createBackup(entries), null, 2));
-      setPreviewLabel("Current local data");
+      const migration = retryMigration
+        ? await repository.retryMigration()
+        : await repository.initialize();
+
+      if (migration.status === "failed") {
+        setCanRetryMigration(true);
+        setNotice({
+          tone: "error",
+          text: "The schema-v2 migration could not finish. Legacy data was left untouched.",
+        });
+        return;
+      }
+
+      const [data, backup] = await Promise.all([repository.getData(), repository.exportBackup()]);
+      const nextInventory = inventoryFrom(data);
+      setInventory(nextInventory);
+      setPreview(JSON.stringify(backup, null, 2));
+      setPreviewLabel("Current v2 backup");
+      setCanRetryMigration(false);
       setNotice({
         tone: "success",
         text:
           message ??
-          (Object.keys(entries).length
-            ? "Awthor local data is available in this browser."
-            : "No Awthor local data is currently stored."),
+          (nextInventory.hasData
+            ? "Awthor schema-v2 data is available in this browser."
+            : "No Awthor books or author profile are currently stored."),
       });
-    } catch {
+    } catch (error) {
       setNotice({
         tone: "error",
-        text: "This browser did not allow Awthor to read local storage.",
+        text:
+          error instanceof Error
+            ? error.message
+            : "This browser did not allow Awthor to read its local repository.",
       });
     } finally {
       setIsReady(true);
@@ -159,40 +154,31 @@ export function TestDataWorkspace() {
   }, []);
 
   useEffect(() => {
-    refreshInventory();
+    void refreshInventory();
   }, [refreshInventory]);
 
-  function seedData() {
-    const existingCount = Object.keys(inventory.entries).length;
+  async function seedData() {
     if (
-      existingCount > 0 &&
-      !window.confirm(
-        "Replace all existing Awthor data in this browser with the complete demo dataset?",
-      )
+      inventory.hasData &&
+      !window.confirm("Replace all existing Awthor data with the schema-v2 demo workspace?")
     ) {
       return;
     }
 
-    const previousEntries = readAwthorEntries();
-
     try {
-      const entries = createSeedStorageEntries(new Date().toISOString());
-      clearAwthorEntries();
-      writeEntries(entries);
-      refreshInventory(
-        "Seeded the author, theme, 4 books, 43 chapters, characters, plots, notes, and settings.",
+      await getAwthorRepository().replaceData(createSeedRepositoryData(new Date().toISOString()));
+      await refreshInventory(
+        "Seeded one Markdown book with three chapters, one character, and chapter arcs.",
       );
-    } catch {
-      clearAwthorEntries();
-      writeEntries(previousEntries);
+    } catch (error) {
       setNotice({
         tone: "error",
-        text: "Seeding failed. The previous Awthor data was restored.",
+        text: error instanceof Error ? error.message : "The demo workspace could not be seeded.",
       });
     }
   }
 
-  function clearData() {
+  async function clearData() {
     if (
       !window.confirm(
         "Clear all Awthor data from this browser? Export a backup first if you may need it later.",
@@ -202,30 +188,27 @@ export function TestDataWorkspace() {
     }
 
     try {
-      clearAwthorEntries();
-      refreshInventory("All Awthor local data was removed from this browser.");
-    } catch {
+      await getAwthorRepository().clearAll();
+      await refreshInventory("All Awthor local data was removed from this browser.");
+    } catch (error) {
       setNotice({
         tone: "error",
-        text: "Awthor local data could not be cleared.",
+        text: error instanceof Error ? error.message : "Awthor local data could not be cleared.",
       });
     }
   }
 
-  function exportData() {
+  async function exportData() {
     try {
-      const entries = readAwthorEntries();
-      const backup = downloadBackup(entries);
+      const backup = await getAwthorRepository().exportBackup();
+      downloadBackup(backup);
       setPreview(JSON.stringify(backup, null, 2));
-      setPreviewLabel("Last exported backup");
-      setNotice({
-        tone: "success",
-        text: `Downloaded a portable JSON backup with ${Object.keys(entries).length} entries.`,
-      });
-    } catch {
+      setPreviewLabel("Last exported v2 backup");
+      setNotice({ tone: "success", text: "Downloaded a portable schema-v2 JSON backup." });
+    } catch (error) {
       setNotice({
         tone: "error",
-        text: "The JSON backup could not be created.",
+        text: error instanceof Error ? error.message : "The JSON backup could not be created.",
       });
     }
   }
@@ -238,39 +221,21 @@ export function TestDataWorkspace() {
         throw new Error("Backup files must be smaller than 10 MB.");
       }
 
-      const parsed: unknown = JSON.parse(await file.text());
-      const backup = backupSchema.parse(parsed);
-      const invalidKey = Object.keys(backup.entries).find((key) => !isAwthorStorageKey(key));
-
-      if (invalidKey) {
-        throw new Error("The backup contains a non-Awthor storage key.");
-      }
-
       if (
-        Object.keys(inventory.entries).length > 0 &&
-        !window.confirm("Replace all current Awthor data in this browser with the selected backup?")
+        inventory.hasData &&
+        !window.confirm("Replace all current Awthor data with the selected backup?")
       ) {
         return;
       }
 
-      const previousEntries = readAwthorEntries();
-
-      try {
-        clearAwthorEntries();
-        writeEntries(backup.entries);
-      } catch (error) {
-        clearAwthorEntries();
-        writeEntries(previousEntries);
-        throw error;
-      }
-
-      refreshInventory(
-        "Imported " +
-          Object.keys(backup.entries).length +
-          " Awthor entries from " +
-          file.name +
-          ".",
-      );
+      const parsed: unknown = JSON.parse(await file.text());
+      const result = await getAwthorRepository().importBackup(parsed);
+      const discarded = result.discarded.notes + result.discarded.plots;
+      const migrationMessage =
+        result.importedVersion === 1
+          ? ` Imported the v1 backup into v2; ${discarded} legacy Notes/Plots record${discarded === 1 ? " was" : "s were"} discarded.`
+          : " Imported the schema-v2 backup.";
+      await refreshInventory(`${file.name} restored.${migrationMessage}`);
     } catch (error) {
       setNotice({
         tone: "error",
@@ -284,7 +249,6 @@ export function TestDataWorkspace() {
     }
   }
 
-  const entryCount = Object.keys(inventory.entries).length;
   const noticeClass =
     notice.tone === "error"
       ? "border-destructive/25 bg-destructive/10 text-destructive"
@@ -321,34 +285,25 @@ export function TestDataWorkspace() {
               Local data lab
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-              Populate a complete demo workspace, reset this origin, or move the exact local state
-              between browsers with a JSON backup.
+              Seed the v2 repository, inspect its portable backup, or verify import and migration
+              behavior without bypassing Awthor&apos;s data boundary.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:flex">
-            <div className="rounded-2xl border border-border bg-card px-4 py-3">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                Stored entries
-              </p>
-              <p className="mt-1 font-heading text-2xl font-semibold">
-                {isReady ? entryCount : "—"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border bg-card px-4 py-3">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
-                Approx. size
-              </p>
-              <p className="mt-1 font-heading text-2xl font-semibold">
-                {isReady ? formatBytes(inventory.bytes) : "—"}
-              </p>
-            </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <InventoryStat label="Books" value={isReady ? inventory.books : "—"} />
+            <InventoryStat label="Chapters" value={isReady ? inventory.chapters : "—"} />
+            <InventoryStat label="Characters" value={isReady ? inventory.characters : "—"} />
+            <InventoryStat
+              label="Approx. size"
+              value={isReady ? formatBytes(inventory.bytes) : "—"}
+            />
           </div>
         </section>
 
         <div
           aria-live="polite"
-          className={`mt-7 rounded-2xl border px-4 py-3 text-sm font-semibold ${noticeClass}`}
+          className={`mt-7 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold ${noticeClass}`}
         >
           <span className="inline-flex items-center gap-2">
             {notice.tone === "error" ? (
@@ -358,6 +313,16 @@ export function TestDataWorkspace() {
             )}
             {notice.text}
           </span>
+          {canRetryMigration ? (
+            <Button
+              onClick={() => void refreshInventory(undefined, true)}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCw aria-hidden="true" />
+              Retry migration
+            </Button>
+          ) : null}
         </div>
 
         <section
@@ -365,25 +330,30 @@ export function TestDataWorkspace() {
           className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
         >
           <ActionCard
-            description="Replace Awthor storage with a complete, realistic demo workspace."
+            description="Replace the repository with a Markdown manuscript, character, and chapter arcs."
             icon={Database}
-            title="Seed data"
+            title="Seed v2 data"
           >
-            <Button className="w-full" disabled={!isReady} onClick={seedData} size="lg">
+            <Button
+              className="w-full"
+              disabled={!isReady}
+              onClick={() => void seedData()}
+              size="lg"
+            >
               <Database aria-hidden="true" />
               Seed or replace
             </Button>
           </ActionCard>
 
           <ActionCard
-            description="Remove every Awthor-owned key while preserving unrelated site data."
+            description="Remove all product data through the repository's scoped cleanup operation."
             icon={Trash2}
-            title="Unseed"
+            title="Clear"
           >
             <Button
               className="w-full"
-              disabled={!isReady || entryCount === 0}
-              onClick={clearData}
+              disabled={!isReady || !inventory.hasData}
+              onClick={() => void clearData()}
               size="lg"
               variant="destructive"
             >
@@ -393,14 +363,14 @@ export function TestDataWorkspace() {
           </ActionCard>
 
           <ActionCard
-            description="Download the current raw storage entries in a portable JSON envelope."
+            description="Download the canonical v2 backup produced by AwthorRepository."
             icon={Download}
             title="Export"
           >
             <Button
               className="w-full"
-              disabled={!isReady || entryCount === 0}
-              onClick={exportData}
+              disabled={!isReady}
+              onClick={() => void exportData()}
               size="lg"
               variant="outline"
             >
@@ -410,7 +380,7 @@ export function TestDataWorkspace() {
           </ActionCard>
 
           <ActionCard
-            description="Validate and restore a JSON file previously exported from this page."
+            description="Restore v2 backups, or migrate supported v1 records with a discard report."
             icon={Upload}
             title="Import"
           >
@@ -445,13 +415,12 @@ export function TestDataWorkspace() {
             <CardHeader>
               <CardTitle className="text-xl">Seed contents</CardTitle>
               <CardDescription>
-                The bundled dataset is large enough to exercise list, detail, relationship, and
-                backup flows.
+                A focused fixture for the four-screen library and writing workspace.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-3">
-                {Object.entries(seedSummary).map(([label, value]) => (
+                {Object.entries(seedRepositorySummary).map(([label, value]) => (
                   <div className="rounded-xl bg-muted/70 px-3.5 py-3" key={label}>
                     <dt className="text-[11px] font-extrabold uppercase tracking-[0.11em] text-muted-foreground">
                       {label}
@@ -461,27 +430,27 @@ export function TestDataWorkspace() {
                 ))}
               </dl>
               <div className="mt-4 rounded-xl border border-border bg-background/70 p-4 text-xs leading-5 text-muted-foreground">
-                <p className="font-bold text-foreground">Included settings</p>
+                <p className="font-bold text-foreground">Included v2 data</p>
                 <p className="mt-1">
-                  Author profile, paper theme, editor preferences, active book, and backup reminder.
+                  Author settings, Paper theme, Markdown chapters, reading positions, a character
+                  dossier, and per-chapter stage and tension arcs.
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-[#20231f] text-[#e9eadf] shadow-none ring-black/10">
-            <CardHeader className="border-b border-white/10 pb-5">
+          <Card className="bg-muted text-foreground shadow-none">
+            <CardHeader className="border-b border-border pb-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-xl text-white">
-                    <Braces aria-hidden="true" className="size-5 text-[#aebc95]" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Braces aria-hidden="true" className="size-5 text-primary" />
                     JSON dump
                   </CardTitle>
-                  <CardDescription className="mt-1 text-[#a7aa9f]">{previewLabel}</CardDescription>
+                  <CardDescription className="mt-1">{previewLabel}</CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <Button
-                    className="border-white/15 bg-transparent text-[#e9eadf] hover:bg-white/10 hover:text-white"
                     onClick={() => {
                       setPreview(initialPreview);
                       setPreviewLabel("Seed preview");
@@ -492,12 +461,7 @@ export function TestDataWorkspace() {
                     <FileJson aria-hidden="true" />
                     Seed
                   </Button>
-                  <Button
-                    className="border-white/15 bg-transparent text-[#e9eadf] hover:bg-white/10 hover:text-white"
-                    onClick={() => refreshInventory()}
-                    size="sm"
-                    variant="outline"
-                  >
+                  <Button onClick={() => void refreshInventory()} size="sm" variant="outline">
                     <RefreshCw aria-hidden="true" />
                     Current
                   </Button>
@@ -505,7 +469,7 @@ export function TestDataWorkspace() {
               </div>
             </CardHeader>
             <CardContent>
-              <pre className="max-h-[42rem] overflow-auto rounded-xl bg-black/20 p-4 font-mono text-[11px] leading-5 text-[#d8dacd]">
+              <pre className="max-h-[42rem] overflow-auto rounded-xl border border-border bg-background p-4 font-mono text-[11px] leading-5 text-foreground">
                 <code>{preview}</code>
               </pre>
             </CardContent>
@@ -513,11 +477,22 @@ export function TestDataWorkspace() {
         </section>
 
         <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
-          This page never sends data to a server. Imported files are read in the browser and written
-          only to this origin&apos;s local storage.
+          This page never sends data to a server. Imported files are read in the browser and passed
+          through AwthorRepository before being stored on this device.
         </p>
       </div>
     </main>
+  );
+}
+
+function InventoryStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card px-4 py-3">
+      <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 font-heading text-2xl font-semibold">{value}</p>
+    </div>
   );
 }
 

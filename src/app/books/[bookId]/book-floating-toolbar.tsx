@@ -1,166 +1,209 @@
 "use client";
 
-import { useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChapterArcDrawer } from "@/components/book-tools/chapter-arc-drawer";
+import { CharactersDrawer } from "@/components/book-tools/characters-drawer";
 import { FloatingToolbar, type FloatingToolbarItem } from "@/components/ui/floating-toolbar";
+import { countManuscript } from "@/lib/markdown";
+import type { Chapter, WorkspaceMode, WorkspaceTool } from "@/lib/repository";
+
+const ProofreadingDrawer = dynamic(
+  () =>
+    import("@/components/book-tools/proofreading-drawer").then(
+      (module) => module.ProofreadingDrawer,
+    ),
+  { ssr: false },
+);
 
 type BookFloatingToolbarProps = {
   bookId: string;
-  characterCount: string;
-  characterCountWithSpaces: string;
-  wordCount: string;
+  chapters: readonly Chapter[];
+  currentChapterId: string;
+  draft: string;
+  mode: WorkspaceMode;
+  activeTool: WorkspaceTool;
+  onActiveToolChange: (tool: WorkspaceTool) => void;
+  onApplyDraft: (markdown: string) => void;
+  onRequestWrite: () => void;
+  onChapterUpdated: (chapter: Chapter) => void;
+  onBeforeToolOpen: () => Promise<void>;
+  onToolDirtyChange: (tool: Exclude<WorkspaceTool, null>, dirty: boolean) => void;
+  onRestoreEditorFocus: () => void;
 };
 
 export function BookFloatingToolbar({
+  activeTool,
   bookId,
-  characterCount,
-  characterCountWithSpaces,
-  wordCount,
+  chapters,
+  currentChapterId,
+  draft,
+  mode,
+  onActiveToolChange,
+  onApplyDraft,
+  onBeforeToolOpen,
+  onChapterUpdated,
+  onRequestWrite,
+  onRestoreEditorFocus,
+  onToolDirtyChange,
 }: BookFloatingToolbarProps) {
-  const [mode, setMode] = useState<"read" | "write">("read");
-  const [spellCheck, setSpellCheck] = useState(false);
-  const [visualDrift, setVisualDrift] = useState(false);
+  const [announcement, setAnnouncement] = useState("Book tools ready.");
+  const [openingTool, setOpeningTool] = useState<WorkspaceTool>(null);
   const [showCounts, setShowCounts] = useState(false);
-  const [announcement, setAnnouncement] = useState("Read mode selected.");
+  const previousToolRef = useRef<WorkspaceTool>(activeTool);
+  const counts = useMemo(() => countManuscript(draft), [draft]);
 
-  function toggleMode() {
-    const nextMode = mode === "read" ? "write" : "read";
-    setMode(nextMode);
-    setAnnouncement(`${nextMode === "read" ? "Read" : "Write"} mode selected.`);
+  useEffect(() => {
+    if (previousToolRef.current && !activeTool) {
+      if (mode === "write") {
+        onRestoreEditorFocus();
+      } else {
+        window.dispatchEvent(
+          new CustomEvent("awthor:reveal-tools", {
+            detail: { itemId: previousToolRef.current },
+          }),
+        );
+      }
+    }
+    previousToolRef.current = activeTool;
+  }, [activeTool, mode, onRestoreEditorFocus]);
+
+  async function selectTool(tool: Exclude<WorkspaceTool, null>, label: string) {
+    if (activeTool === tool) {
+      onActiveToolChange(null);
+      setAnnouncement(`${label} closed.`);
+      return;
+    }
+
+    setOpeningTool(tool);
+    setAnnouncement(`Opening ${label.toLowerCase()}…`);
+    try {
+      await onBeforeToolOpen();
+      onActiveToolChange(tool);
+      setAnnouncement(`${label} opened.`);
+    } catch {
+      setAnnouncement(`${label} could not open because the current chapter was not saved.`);
+    } finally {
+      setOpeningTool(null);
+    }
   }
 
-  function toggleSpellCheck() {
-    setSpellCheck((current) => {
-      const nextValue = !current;
-      setAnnouncement(`Spell and grammar check ${nextValue ? "enabled" : "disabled"}.`);
-      return nextValue;
-    });
+  function closeTool(tool: Exclude<WorkspaceTool, null>, open: boolean) {
+    if (!open && activeTool === tool) {
+      onActiveToolChange(null);
+    }
   }
 
-  function toggleVisualDrift() {
-    setVisualDrift((current) => {
-      const nextValue = !current;
-      setAnnouncement(`Visual drift ${nextValue ? "enabled" : "disabled"}.`);
-      return nextValue;
-    });
-  }
+  const reportCharacterDirty = useCallback(
+    (dirty: boolean) => onToolDirtyChange("characters", dirty),
+    [onToolDirtyChange],
+  );
+  const reportChapterArcDirty = useCallback(
+    (dirty: boolean) => onToolDirtyChange("chapter-arc", dirty),
+    [onToolDirtyChange],
+  );
 
   function toggleCounts() {
     setShowCounts((current) => {
-      const nextValue = !current;
-      setAnnouncement(`Writing counts ${nextValue ? "shown" : "hidden"}.`);
-      return nextValue;
+      const next = !current;
+      setAnnouncement(next ? "Chapter counts shown." : "Chapter counts hidden.");
+      return next;
     });
   }
 
   const items: FloatingToolbarItem[] = [
     {
-      id: "mode",
-      label: `Switch to ${mode === "read" ? "write" : "read"} mode`,
-      displayLabel: mode === "read" ? "Read" : "Write",
-      icon: mode === "read" ? "BookOpen" : "PenLine",
-      onSelect: toggleMode,
-      pressed: mode === "write",
-      shortcut: "1",
-    },
-    {
-      id: "spell-check",
-      label: `${spellCheck ? "Disable" : "Enable"} spell and grammar check`,
-      displayLabel: spellCheck ? "Spell on" : "Spell off",
+      id: "spelling",
+      label: "Open spell check",
+      displayLabel: "Spell check",
       icon: "SpellCheck2",
-      onSelect: toggleSpellCheck,
-      pressed: spellCheck,
-      shortcut: "2",
-    },
-    {
-      id: "visual-drift",
-      label: `${visualDrift ? "Disable" : "Enable"} visual drift`,
-      displayLabel: visualDrift ? "Drift on" : "Drift off",
-      icon: "ScanSearch",
-      onSelect: toggleVisualDrift,
-      pressed: visualDrift,
-      shortcut: "3",
+      onSelect: () => void selectTool("spelling", "Spell check"),
+      pressed: activeTool === "spelling",
+      disabled: openingTool !== null,
+      tooltip: "Spell check · runs locally",
     },
     {
       id: "characters",
       label: "Open characters",
       displayLabel: "Characters",
       icon: "Users",
-      href: `/books/${bookId}/characters`,
-      dividerBefore: true,
-      shortcut: "4",
+      onSelect: () => void selectTool("characters", "Characters"),
+      pressed: activeTool === "characters",
+      disabled: openingTool !== null,
+      tooltip: "Characters · story bible",
     },
     {
       id: "chapter-arc",
       label: "Open chapter arc",
       displayLabel: "Chapter arc",
       icon: "ListTree",
-      href: `/books/${bookId}/chapters`,
-      shortcut: "5",
-    },
-    {
-      id: "book-arc",
-      label: "Open book arc",
-      displayLabel: "Book arc",
-      icon: "Waypoints",
-      href: `/books/${bookId}/plots`,
-      shortcut: "6",
+      onSelect: () => void selectTool("chapter-arc", "Chapter arc"),
+      pressed: activeTool === "chapter-arc",
+      disabled: openingTool !== null,
+      tooltip: "Chapter arc · tension and outcomes",
     },
     {
       id: "counts",
-      label: `${showCounts ? "Hide" : "Show"} word and character counts`,
+      label: showCounts ? "Hide chapter counts" : "Show chapter counts",
       displayLabel: "Counts",
-      icon: "Sigma",
+      icon: "LetterText",
       onSelect: toggleCounts,
       pressed: showCounts,
-      dividerBefore: true,
-      shortcut: "7",
+      tooltip: showCounts ? "Hide word and character count" : "Show word and character count",
     },
   ];
 
   return (
-    <FloatingToolbar
-      accessory={
-        showCounts ? (
-          <WritingCounts
-            characterCount={characterCount}
-            characterCountWithSpaces={characterCountWithSpaces}
-            wordCount={wordCount}
-          />
-        ) : null
-      }
-      announcement={announcement}
-      autoHide
-      collapsedLabel="Show book tools"
-      items={items}
-      label="Book tools"
-    />
-  );
-}
-
-function WritingCounts({
-  characterCount,
-  characterCountWithSpaces,
-  wordCount,
-}: Omit<BookFloatingToolbarProps, "bookId">) {
-  return (
-    <section
-      aria-label="Writing counts"
-      className="rounded-2xl border border-border/80 bg-popover/95 px-4 py-3 text-popover-foreground shadow-lg shadow-foreground/10 backdrop-blur-xl"
-    >
-      <dl className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs">
-        <Count label="Words" value={wordCount} />
-        <Count label="Characters" value={characterCount} />
-        <Count label="With spaces" value={characterCountWithSpaces} />
-      </dl>
-    </section>
-  );
-}
-
-function Count({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <dt className="font-semibold text-muted-foreground">{label}</dt>
-      <dd className="font-mono font-bold text-foreground tabular-nums">{value}</dd>
-    </div>
+    <>
+      <FloatingToolbar
+        accessory={
+          showCounts ? (
+            <div
+              className="flex items-center gap-2 rounded-full border border-border/80 bg-popover/95 px-3 py-1.5 text-xs font-medium text-popover-foreground shadow-lg shadow-foreground/10 backdrop-blur-xl"
+              title="Character count includes whitespace"
+            >
+              <span className="tabular-nums">
+                {counts.wordCount.toLocaleString()} {counts.wordCount === 1 ? "word" : "words"}
+              </span>
+              <span aria-hidden="true" className="size-1 rounded-full bg-muted-foreground/50" />
+              <span className="tabular-nums">
+                {counts.characterCountWithSpaces.toLocaleString()} characters
+              </span>
+            </div>
+          ) : null
+        }
+        announcement={announcement}
+        autoHide
+        collapsedLabel="Tools"
+        heldOpen={activeTool !== null || openingTool !== null}
+        items={items}
+        label="Book tools"
+      />
+      {activeTool === "spelling" ? (
+        <ProofreadingDrawer
+          draft={draft}
+          mode={mode}
+          onApplyDraft={onApplyDraft}
+          onOpenChange={(open) => closeTool("spelling", open)}
+          onRequestWrite={onRequestWrite}
+          open
+        />
+      ) : null}
+      <CharactersDrawer
+        bookId={bookId}
+        onDirtyChange={reportCharacterDirty}
+        onOpenChange={(open) => closeTool("characters", open)}
+        open={activeTool === "characters"}
+      />
+      <ChapterArcDrawer
+        bookId={bookId}
+        chapters={chapters}
+        currentChapterId={currentChapterId}
+        onChapterUpdated={onChapterUpdated}
+        onDirtyChange={reportChapterArcDirty}
+        onOpenChange={(open) => closeTool("chapter-arc", open)}
+        open={activeTool === "chapter-arc"}
+      />
+    </>
   );
 }

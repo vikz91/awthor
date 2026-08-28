@@ -26,6 +26,8 @@ interface IssueHandle {
 
 export interface HarperProofreadingServiceOptions {
   dialect?: ProofreadingDialect;
+  /** Test/adapter seam. Product UI should use the composition root instead. */
+  linterFactory?: () => Promise<Linter>;
 }
 
 const categoryByLintKind: Record<LintKind, ProofreadingCategory> = {
@@ -63,9 +65,9 @@ function assertBrowser(): void {
 async function createWorkerLinter(dialect: ProofreadingDialect): Promise<Linter> {
   assertBrowser();
 
-  const [{ Dialect, WorkerLinter }, { binary }] = await Promise.all([
+  const [{ Dialect, WorkerLinter }, { binaryInlined }] = await Promise.all([
     import("harper.js"),
-    import("harper.js/binary"),
+    import("harper.js/binaryInlined"),
   ]);
 
   const dialects: Record<ProofreadingDialect, HarperDialect> = {
@@ -76,7 +78,7 @@ async function createWorkerLinter(dialect: ProofreadingDialect): Promise<Linter>
     indian: Dialect.Indian,
   };
 
-  return new WorkerLinter({ binary, dialect: dialects[dialect] });
+  return new WorkerLinter({ binary: binaryInlined, dialect: dialects[dialect] });
 }
 
 function toSuggestionKind(kind: HarperSuggestionKind): ProofreadingSuggestionKind {
@@ -114,9 +116,11 @@ export class HarperProofreadingService implements ProofreadingService {
   private linterPromise: Promise<Linter> | undefined;
   private revision = 0;
   private disposed = false;
+  private readonly linterFactory: () => Promise<Linter>;
 
   constructor(options: HarperProofreadingServiceOptions = {}) {
     this.dialect = options.dialect ?? "american";
+    this.linterFactory = options.linterFactory ?? (() => createWorkerLinter(this.dialect));
   }
 
   async initialize(): Promise<void> {
@@ -133,6 +137,9 @@ export class HarperProofreadingService implements ProofreadingService {
     }
 
     const linter = await this.getLinter();
+    if (options.signal?.aborted || revision !== this.revision) {
+      return [];
+    }
     const lints = await linter.lint(text, {
       language: options.format ?? "plaintext",
       dedup: options.deduplicate ?? true,
@@ -332,7 +339,7 @@ export class HarperProofreadingService implements ProofreadingService {
     this.assertActive();
 
     if (!this.linterPromise) {
-      this.linterPromise = createWorkerLinter(this.dialect)
+      this.linterPromise = this.linterFactory()
         .then(async (linter) => {
           await linter.setup();
           return linter;
