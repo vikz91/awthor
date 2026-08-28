@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -40,28 +39,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  type Chapter,
+  type ChapterStatus,
+  chapterStatuses,
+  getAwthorRepository,
+} from "@/lib/repository";
+import { useRepositoryCollection } from "@/lib/repository/use-repository-collection";
 import { cn } from "@/lib/utils";
-
-type ChapterStatus = "Draft" | "Revision" | "Complete";
-
-type Chapter = {
-  id: string;
-  number: number;
-  title: string;
-  summary: string;
-  status: ChapterStatus;
-  words: number;
-  pov: string;
-  body: string;
-  lastEdited: string;
-};
 
 type ChapterWorkspaceProps = {
   bookId: string;
   title: string;
   chapterCount: number;
   wordCount: number;
-  targetWords: number;
   currentChapterTitle: string;
   currentExcerpt: string;
 };
@@ -71,8 +62,6 @@ type ChapterBlueprint = {
   summary: string;
   pov: string;
 };
-
-const chapterStatuses: ChapterStatus[] = ["Draft", "Revision", "Complete"];
 
 const statusStyles: Record<ChapterStatus, string> = {
   Draft: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200",
@@ -191,6 +180,8 @@ const chapterBlueprints: Record<string, ChapterBlueprint[]> = {
   ],
 };
 
+const repository = getAwthorRepository();
+
 function countWords(value: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed.split(/\s+/).length : 0;
@@ -217,7 +208,7 @@ function createInitialChapters({
         "\n\nThis completed mock chapter is ready for review. Select it to update its metadata or manuscript text.";
 
     return {
-      id: "chapter-" + number,
+      id: `chapter-${number}`,
       number,
       title: isCurrent ? currentChapterTitle : blueprint.title,
       summary: blueprint.summary,
@@ -240,26 +231,45 @@ export function ChapterWorkspace(props: ChapterWorkspaceProps) {
     title: bookTitle,
     chapterCount,
     wordCount,
-    targetWords,
     currentChapterTitle,
     currentExcerpt,
   } = props;
-  const [chapters, setChapters] = useState(() =>
-    createInitialChapters({ bookId, chapterCount, currentChapterTitle, currentExcerpt }),
+  const seedChapters = useMemo(
+    () => createInitialChapters({ bookId, chapterCount, currentChapterTitle, currentExcerpt }),
+    [bookId, chapterCount, currentChapterTitle, currentExcerpt],
   );
-  const [selectedId, setSelectedId] = useState("chapter-" + chapterCount);
-  const [draft, setDraft] = useState<Chapter>(() => chapters[chapters.length - 1]);
+  const [chapters, setChapters, repositoryState] = useRepositoryCollection(
+    repository.chapters,
+    bookId,
+    seedChapters,
+  );
+  const [selectedId, setSelectedId] = useState(`chapter-${chapterCount}`);
+  const [draft, setDraft] = useState<Chapter>(() => seedChapters[seedChapters.length - 1]);
   const [query, setQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newPov, setNewPov] = useState("");
+  const hydratedBookId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!repositoryState.isReady || hydratedBookId.current === bookId) {
+      return;
+    }
+
+    const selected = chapters.find((chapter) => chapter.id === selectedId) ?? chapters.at(-1);
+    if (selected) {
+      setSelectedId(selected.id);
+      setDraft(selected);
+    }
+    hydratedBookId.current = bookId;
+  }, [bookId, chapters, repositoryState.isReady, selectedId]);
 
   const navItems = [
-    { label: "Overview", href: "/books/" + bookId },
-    { label: "Chapters", href: "/books/" + bookId + "/chapters" },
-    { label: "Characters", href: "/books/" + bookId + "/characters" },
-    { label: "Plots", href: "/books/" + bookId + "/plots" },
-    { label: "Notes", href: "/books/" + bookId + "/notes" },
+    { label: "Overview", href: `/books/${bookId}` },
+    { label: "Chapters", href: `/books/${bookId}/chapters` },
+    { label: "Characters", href: `/books/${bookId}/characters` },
+    { label: "Plots", href: `/books/${bookId}/plots` },
+    { label: "Notes", href: `/books/${bookId}/notes` },
   ];
   const selectedChapter = chapters.find((chapter) => chapter.id === selectedId);
   const hasUnsavedChanges = selectedChapter
@@ -280,7 +290,6 @@ export function ChapterWorkspace(props: ChapterWorkspaceProps) {
       .reverse();
   }, [chapters, query]);
   const completedCount = chapters.filter((chapter) => chapter.status === "Complete").length;
-  const manuscriptProgress = Math.min(100, Math.round((wordCount / targetWords) * 100));
   const averageWords = chapters.length ? Math.round(wordCount / chapters.length) : 0;
 
   function selectChapter(chapter: Chapter) {
@@ -330,7 +339,7 @@ export function ChapterWorkspace(props: ChapterWorkspaceProps) {
 
     const number = chapters.reduce((highest, chapter) => Math.max(highest, chapter.number), 0) + 1;
     const createdChapter: Chapter = {
-      id: "chapter-" + number + "-" + Date.now(),
+      id: `chapter-${number}-${Date.now()}`,
       number,
       title: cleanTitle,
       summary: "",
@@ -355,7 +364,7 @@ export function ChapterWorkspace(props: ChapterWorkspaceProps) {
         <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <Link
             className="inline-flex items-center gap-2 text-sm font-bold text-muted-foreground transition hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-            href={"/books/" + bookId}
+            href={`/books/${bookId}`}
           >
             <ArrowLeft aria-hidden="true" className="size-4" />
             <span className="hidden sm:inline">{bookTitle}</span>
@@ -363,8 +372,10 @@ export function ChapterWorkspace(props: ChapterWorkspaceProps) {
           </Link>
           <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
             <HardDrive aria-hidden="true" className="size-3.5" />
-            <span className="hidden sm:inline">Saved on this device</span>
-            <span className="sm:hidden">Local</span>
+            <span className="hidden sm:inline">
+              {repositoryState.error ? "Local save unavailable" : "Saved on this device"}
+            </span>
+            <span className="sm:hidden">{repositoryState.error ? "Save error" : "Local"}</span>
           </div>
         </div>
         <nav
@@ -483,18 +494,15 @@ export function ChapterWorkspace(props: ChapterWorkspaceProps) {
               </p>
             </CardContent>
           </Card>
-          <Card className="gap-3 rounded-2xl bg-card py-5 ring-border">
+          <Card className="gap-1 rounded-2xl bg-card py-5 ring-border">
             <CardContent>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-extrabold tracking-[0.12em] text-muted-foreground uppercase">
-                  Draft progress
-                </p>
-                <span className="text-xs font-bold text-primary">{manuscriptProgress}%</span>
-              </div>
-              <Progress className="mt-3" value={manuscriptProgress} />
-              <p className="mt-2 text-xs text-muted-foreground">
-                {targetWords.toLocaleString()} word target
+              <p className="text-xs font-extrabold tracking-[0.12em] text-muted-foreground uppercase">
+                Current chapter
               </p>
+              <p className="mt-2 truncate font-heading text-lg font-semibold">
+                {currentChapterTitle}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Chapter {chapterCount}</p>
             </CardContent>
           </Card>
         </section>
@@ -523,51 +531,51 @@ export function ChapterWorkspace(props: ChapterWorkspaceProps) {
                 />
               </div>
             </div>
-            <div className="max-h-[640px] overflow-y-auto p-2" role="list">
+            <ul className="max-h-[640px] overflow-y-auto p-2">
               {visibleChapters.length ? (
                 visibleChapters.map((chapter) => {
                   const active = chapter.id === selectedId;
                   return (
-                    <button
-                      aria-pressed={active}
-                      className={cn(
-                        "w-full rounded-xl p-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                        active ? "bg-primary/10" : "hover:bg-muted/70",
-                      )}
-                      key={chapter.id}
-                      onClick={() => selectChapter(chapter)}
-                      role="listitem"
-                      type="button"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-[11px] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">
-                          Chapter {chapter.number}
-                        </span>
-                        <Badge
-                          className={cn("border-0 text-[10px]", statusStyles[chapter.status])}
-                          variant="secondary"
-                        >
-                          {chapter.status}
-                        </Badge>
-                      </div>
-                      <p className="mt-1.5 line-clamp-1 font-heading text-base font-semibold">
-                        {chapter.title}
-                      </p>
-                      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                        <span>{chapter.words.toLocaleString()} words</span>
-                        <span>{chapter.lastEdited}</span>
-                      </div>
-                    </button>
+                    <li key={chapter.id}>
+                      <button
+                        aria-pressed={active}
+                        className={cn(
+                          "w-full rounded-xl p-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                          active ? "bg-primary/10" : "hover:bg-muted/70",
+                        )}
+                        onClick={() => selectChapter(chapter)}
+                        type="button"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[11px] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">
+                            Chapter {chapter.number}
+                          </span>
+                          <Badge
+                            className={cn("border-0 text-[10px]", statusStyles[chapter.status])}
+                            variant="secondary"
+                          >
+                            {chapter.status}
+                          </Badge>
+                        </div>
+                        <p className="mt-1.5 line-clamp-1 font-heading text-base font-semibold">
+                          {chapter.title}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                          <span>{chapter.words.toLocaleString()} words</span>
+                          <span>{chapter.lastEdited}</span>
+                        </div>
+                      </button>
+                    </li>
                   );
                 })
               ) : (
-                <div className="px-3 py-10 text-center">
+                <li className="px-3 py-10 text-center">
                   <Search aria-hidden="true" className="mx-auto size-5 text-muted-foreground" />
                   <p className="mt-3 text-sm font-bold">No chapters found</p>
                   <p className="mt-1 text-xs text-muted-foreground">Try a title, number, or POV.</p>
-                </div>
+                </li>
               )}
-            </div>
+            </ul>
           </Card>
 
           <Card className="gap-0 rounded-2xl bg-card py-0 ring-border">

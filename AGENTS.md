@@ -63,6 +63,23 @@ a coherent user experience.
 - Prefer CSS and existing icon libraries for interface visuals. Optimize real images and fonts,
   avoid layout shifts, and keep client-side JavaScript lean.
 
+## Design for every app theme
+
+- Treat theme support as a default requirement for every new or updated component and page. Check
+  the interface in all supported themes, including light, paper, and dark, before handing it off.
+- Use the existing semantic design tokens and theme-aware utilities for surfaces, text, borders,
+  inputs, focus rings, muted states, accents, and destructive states—for example `bg-background`,
+  `bg-card`, `text-foreground`, `text-muted-foreground`, `border-border`, and `text-primary`.
+- Do not hard-code hex, RGB, HSL, or framework palette colors directly in component class names or
+  inline styles when a semantic token can express the intent.
+- When the design genuinely needs a new color role, define it once as a named CSS custom property
+  for every supported theme, expose it through the shared token system, and consume that token in
+  components. Do not scatter one-off color values across pages.
+- Prefer theme tokens over conditional theme checks. Use the theme provider in component logic only
+  when behavior or content must change, not merely to swap visual colors that CSS tokens can handle.
+- Preserve accessible contrast for text, controls, status indicators, selection states, and focus
+  rings in every theme. Do not rely on color alone to communicate state.
+
 ## Maintain code quality without slowing delivery
 
 - Keep TypeScript strict and model data with explicit, reusable types when that improves clarity.

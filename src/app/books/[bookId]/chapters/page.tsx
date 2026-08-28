@@ -7,7 +7,6 @@ const books: Record<
     title: string;
     chapterCount: number;
     wordCount: number;
-    targetWords: number;
     currentChapterTitle: string;
     currentExcerpt: string;
   }
@@ -16,7 +15,6 @@ const books: Record<
     title: "The Long Way Home",
     chapterCount: 12,
     wordCount: 42680,
-    targetWords: 80000,
     currentChapterTitle: "The road at dusk",
     currentExcerpt:
       "By dusk, the road had disappeared beneath the snow. Mara watched the last county truck turn back toward Stillwater and understood that leaving would have to wait.",
@@ -25,7 +23,6 @@ const books: Record<
     title: "Saltwater Static",
     chapterCount: 6,
     wordCount: 18240,
-    targetWords: 65000,
     currentChapterTitle: "Voices under weather",
     currentExcerpt:
       "The receiver clicked awake at 2:13 in the morning. Beneath the weather report, a second voice counted backward from the year Nora's sister vanished.",
@@ -34,7 +31,6 @@ const books: Record<
     title: "Paper Moons",
     chapterCount: 22,
     wordCount: 71010,
-    targetWords: 75000,
     currentChapterTitle: "The letter dated tomorrow",
     currentExcerpt:
       "Theo turned the envelope over twice before opening it. June's handwriting was unmistakable, but the postmark belonged to a day that had not happened yet.",
@@ -43,7 +39,6 @@ const books: Record<
     title: "Wildlight Orchard",
     chapterCount: 3,
     wordCount: 4890,
-    targetWords: 90000,
     currentChapterTitle: "A memory in the roots",
     currentExcerpt:
       "Lio pressed a palm to the bark and tasted iron, rain, and someone else's fear. The orchard had shown memories before, but never a death.",
@@ -59,8 +54,8 @@ export async function generateMetadata({ params }: ChaptersPageProps): Promise<M
   const bookTitle = books[bookId]?.title ?? "Untitled book";
 
   return {
-    title: "Chapters · " + bookTitle,
-    description: "Organize and draft the chapters of " + bookTitle + ".",
+    title: `Chapters · ${bookTitle}`,
+    description: `Organize and draft the chapters of ${bookTitle}.`,
   };
 }
 
@@ -70,7 +65,6 @@ export default async function ChaptersPage({ params }: ChaptersPageProps) {
     title: "Untitled book",
     chapterCount: 1,
     wordCount: 0,
-    targetWords: 80000,
     currentChapterTitle: "Untitled chapter",
     currentExcerpt: "",
   };

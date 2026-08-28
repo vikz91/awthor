@@ -1,4 +1,13 @@
-import type { Character, Note, OnboardingDetails, PlotThread, Theme } from "./models";
+import type {
+  AppSettings,
+  Book,
+  Chapter,
+  Character,
+  Note,
+  OnboardingDetails,
+  PlotThread,
+  Theme,
+} from "./models";
 
 export interface ValueRepository<Value> {
   get(): Promise<Value | null>;
@@ -21,6 +30,9 @@ export interface ScopedCollectionRepository<Entity extends { id: string }> {
 export interface AwthorRepository {
   profile: ValueRepository<OnboardingDetails>;
   theme: ValueRepository<Theme>;
+  books: ValueRepository<Book[]>;
+  settings: ValueRepository<AppSettings>;
+  chapters: ScopedCollectionRepository<Chapter>;
   characters: ScopedCollectionRepository<Character>;
   plots: ScopedCollectionRepository<PlotThread>;
   notes: ScopedCollectionRepository<Note>;

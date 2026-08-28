@@ -6,16 +6,56 @@ export type Theme = z.infer<typeof themeSchema>;
 
 export const onboardingDetailsSchema = z.object({
   authorName: z.string(),
-  backupReminder: z.boolean(),
-  bio: z.string(),
-  completedAt: z.string().nullable(),
-  genres: z.array(z.string()),
-  penName: z.string(),
+  contactEmail: z.string().default(""),
   theme: themeSchema,
-  writingExperience: z.string(),
-  writingGoal: z.string(),
+  website: z.string().default(""),
 });
 export type OnboardingDetails = z.infer<typeof onboardingDetailsSchema>;
+
+export const bookStatuses = ["Outline", "First draft", "Revision"] as const;
+export const bookStatusSchema = z.enum(bookStatuses);
+
+export const bookSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  author: z.string(),
+  subtitle: z.string(),
+  status: bookStatusSchema,
+  genre: z.string(),
+  subgenre: z.string(),
+  language: z.string(),
+  chapterCount: z.number().int().nonnegative(),
+  pageCount: z.number().int().nonnegative(),
+  wordCount: z.number().int().nonnegative(),
+  characterCount: z.number().int().nonnegative(),
+  characterCountWithSpaces: z.number().int().nonnegative(),
+  preface: z.string(),
+  synopsis: z.string(),
+  isPartOfSeries: z.boolean(),
+  seriesName: z.string(),
+  seriesPosition: z.number().int().positive().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Book = z.infer<typeof bookSchema>;
+
+export const appSettingsSchema = z.object({
+  activeBookId: z.string().nullable(),
+  editor: z.object({
+    fontFamily: z.string(),
+    fontSize: z.number().positive(),
+    lineHeight: z.number().positive(),
+    focusMode: z.boolean(),
+    spellcheck: z.boolean(),
+  }),
+  backupReminder: z.object({
+    enabled: z.boolean(),
+    frequency: z.enum(["daily", "weekly", "monthly"]),
+    lastDismissedAt: z.string().nullable(),
+  }),
+});
+export type AppSettings = z.infer<typeof appSettingsSchema>;
 
 export const characterSchema = z.object({
   id: z.string(),
@@ -33,6 +73,53 @@ export const characterSchema = z.object({
   hidden: z.boolean(),
 });
 export type Character = z.infer<typeof characterSchema>;
+
+export const chapterStatuses = ["Draft", "Revision", "Complete"] as const;
+export const chapterStatusSchema = z.enum(chapterStatuses);
+export type ChapterStatus = z.infer<typeof chapterStatusSchema>;
+
+const workspaceChapterSchema = z.object({
+  id: z.string(),
+  number: z.number().int().positive(),
+  title: z.string(),
+  summary: z.string(),
+  status: chapterStatusSchema,
+  words: z.number().int().nonnegative(),
+  pov: z.string(),
+  body: z.string(),
+  lastEdited: z.string(),
+});
+
+const seededChapterSchema = z
+  .object({
+    id: z.string(),
+    bookId: z.string(),
+    number: z.number().int().positive(),
+    title: z.string(),
+    summary: z.string(),
+    status: chapterStatusSchema,
+    wordCount: z.number().int().nonnegative(),
+    characterCount: z.number().int().nonnegative(),
+    characterCountWithSpaces: z.number().int().nonnegative(),
+    pov: z.string(),
+    content: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .transform((chapter) => ({
+    id: chapter.id,
+    number: chapter.number,
+    title: chapter.title,
+    summary: chapter.summary,
+    status: chapter.status,
+    words: chapter.wordCount,
+    pov: chapter.pov,
+    body: chapter.content,
+    lastEdited: chapter.updatedAt,
+  }));
+
+export const chapterSchema = z.union([workspaceChapterSchema, seededChapterSchema]);
+export type Chapter = z.infer<typeof chapterSchema>;
 
 export const plotTypes = ["Main plot", "Subplot", "Character arc", "Mystery thread"] as const;
 export const plotStatuses = ["Planned", "In progress", "Resolved"] as const;

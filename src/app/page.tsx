@@ -29,9 +29,9 @@ const features = [
   },
   {
     icon: MoonStar,
-    title: "Built for your rhythm",
+    title: "Comfortable in any light",
     description:
-      "Set a daily target, follow your streak, and make steady progress without turning writing into a chore.",
+      "Choose a light, paper, or dark writing space that feels comfortable whenever inspiration arrives.",
   },
 ];
 
@@ -217,7 +217,9 @@ export default function Home() {
                 <h2 className="mt-6 font-heading text-xl font-semibold tracking-tight">
                   {feature.title}
                 </h2>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">{feature.description}</p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  {feature.description}
+                </p>
               </article>
             ))}
           </div>

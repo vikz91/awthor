@@ -25,8 +25,8 @@ can be tested before client-side persistence and the editor are implemented.
 | Route | Purpose |
 | --- | --- |
 | `/` | Marketing landing page with product positioning, an editor preview, features, and calls to action |
-| `/onboarding` | Three-step author profile, writing preferences, theme, and local-storage setup |
-| `/books` | Local library with writing stats, goals, progress, and four demo novels |
+| `/onboarding` | Single-step author name, email, website, theme, and local-storage setup |
+| `/books` | Local library with manuscript statistics and four demo novels |
 | `/books/[bookId]` | Book overview with metadata, preface, series information, and manuscript statistics |
 | `/books/[bookId]/characters` | Interactive mock character roster with editable dossiers and add, hide, and delete actions |
 
@@ -137,7 +137,7 @@ Included now:
 - Responsive shadcn-based book library
 - Book metadata and series overview
 - Interactive character roster and editor
-- Demo writing goals and progress data
+- Demo manuscript and chapter data
 - Page metadata and branded social preview
 - Vercel and Biome configuration
 

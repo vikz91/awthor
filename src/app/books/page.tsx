@@ -1,7 +1,6 @@
 import {
   BookOpen,
   ChevronRight,
-  Flame,
   HardDrive,
   MoreHorizontal,
   Plus,
@@ -23,7 +22,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -37,9 +35,7 @@ const books = [
     title: "The Long Way Home",
     genre: "Literary fiction",
     words: "42,680",
-    target: "80,000",
     chapters: 12,
-    progress: 53,
     updated: "2 hours ago",
     coverClass: "from-[#2f3931] via-[#56624d] to-[#aab294]",
     label: "Last opened",
@@ -50,9 +46,7 @@ const books = [
     title: "Saltwater Static",
     genre: "Mystery",
     words: "18,240",
-    target: "65,000",
     chapters: 6,
-    progress: 28,
     updated: "Yesterday",
     coverClass: "from-[#263f49] via-[#56717a] to-[#b8c9c7]",
     label: "First draft",
@@ -63,12 +57,10 @@ const books = [
     title: "Paper Moons",
     genre: "Romance",
     words: "71,010",
-    target: "75,000",
     chapters: 22,
-    progress: 95,
     updated: "3 days ago",
     coverClass: "from-[#6a4746] via-[#9b706a] to-[#dcc0ae]",
-    label: "Nearly there",
+    label: "Revision",
     roman: "III",
   },
   {
@@ -76,9 +68,7 @@ const books = [
     title: "Wildlight Orchard",
     genre: "Fantasy",
     words: "4,890",
-    target: "90,000",
     chapters: 3,
-    progress: 5,
     updated: "6 days ago",
     coverClass: "from-[#493d31] via-[#796950] to-[#cbb98c]",
     label: "New idea",
@@ -88,8 +78,8 @@ const books = [
 
 const summary = [
   { label: "Total words", value: "136,820", detail: "Across 4 books" },
-  { label: "Writing streak", value: "6 days", detail: "+682 words today", icon: Flame },
-  { label: "Daily target", value: "85%", detail: "682 of 800 words" },
+  { label: "Total chapters", value: "43", detail: "Across every manuscript" },
+  { label: "Recently edited", value: "Today", detail: "The Long Way Home" },
 ];
 
 export default function BooksPage() {
@@ -161,19 +151,14 @@ export default function BooksPage() {
           </button>
         </section>
 
-        <section className="mt-8 grid gap-3 md:grid-cols-3" aria-label="Writing summary">
+        <section className="mt-8 grid gap-3 md:grid-cols-3" aria-label="Library summary">
           {summary.map((item) => (
             <Card className="gap-3 bg-card/80 py-4 shadow-none" key={item.label} size="sm">
               <CardHeader>
                 <CardDescription className="text-xs font-semibold">{item.label}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-2">
-                  <p className="font-heading text-2xl font-semibold tracking-tight">{item.value}</p>
-                  {item.icon ? (
-                    <item.icon aria-hidden="true" className="size-5 text-chart-2" />
-                  ) : null}
-                </div>
+                <p className="font-heading text-2xl font-semibold tracking-tight">{item.value}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
               </CardContent>
             </Card>
@@ -246,15 +231,11 @@ export default function BooksPage() {
                 </CardHeader>
 
                 <CardContent className="pb-5">
-                  <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground">
+                  <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                     <span>{book.words} words</span>
-                    <span>{book.progress}%</span>
-                  </div>
-                  <Progress aria-label={`${book.title} progress`} value={book.progress} />
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                     <span>{book.chapters} chapters</span>
-                    <span>Edited {book.updated}</span>
                   </div>
+                  <p className="mt-3 text-xs text-muted-foreground">Edited {book.updated}</p>
                 </CardContent>
 
                 <CardFooter className="border-t py-3">

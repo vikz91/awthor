@@ -58,12 +58,17 @@ export function useRepositoryCollection<Entity extends { id: string }>(
       return;
     }
 
-    repository.replaceAll(scopeId, entities).catch((error: unknown) => {
-      setState((current) => ({
-        ...current,
-        error: error instanceof Error ? error : new Error("Local data could not be saved."),
-      }));
-    });
+    repository.replaceAll(scopeId, entities).then(
+      () => {
+        setState((current) => (current.error ? { ...current, error: null } : current));
+      },
+      (error: unknown) => {
+        setState((current) => ({
+          ...current,
+          error: error instanceof Error ? error : new Error("Local data could not be saved."),
+        }));
+      },
+    );
   }, [entities, repository, scopeId, state.isReady]);
 
   return [entities, setEntities, state] as const;

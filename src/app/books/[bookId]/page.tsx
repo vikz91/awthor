@@ -36,10 +36,8 @@ const baseBook = {
   chapters: "12",
   pages: "171",
   words: "42,680",
-  targetWords: "80,000",
   charactersWithoutSpaces: "213,406",
   charactersWithSpaces: "254,781",
-  progress: 53,
   preface:
     "Some journeys begin with a departure. This one began with a return. After seventeen years away, Mara Bell comes home to Stillwater carrying little more than a half-finished letter and the uneasy knowledge that the town remembers a different version of her.",
   synopsis:
@@ -65,10 +63,8 @@ const books = {
     chapters: "6",
     pages: "73",
     words: "18,240",
-    targetWords: "65,000",
     charactersWithoutSpaces: "91,204",
     charactersWithSpaces: "108,731",
-    progress: 28,
     preface:
       "On certain nights, the old receiver catches voices beneath the weather report. Nora has spent years calling it interference—until one of those voices says her name.",
     synopsis:
@@ -92,10 +88,8 @@ const books = {
     chapters: "22",
     pages: "284",
     words: "71,010",
-    targetWords: "75,000",
     charactersWithoutSpaces: "355,084",
     charactersWithSpaces: "423,960",
-    progress: 95,
     preface:
       "June kept every letter except the one she meant to send. Ten years later, it arrives at Theo's door with no postmark and a date that has not happened yet.",
     synopsis:
@@ -119,10 +113,8 @@ const books = {
     chapters: "3",
     pages: "20",
     words: "4,890",
-    targetWords: "90,000",
     charactersWithoutSpaces: "24,612",
     charactersWithSpaces: "29,404",
-    progress: 5,
     preface:
       "The orchard blooms only once every seven years, and each fruit carries the memory of the person who planted its seed. This year, one tree remembers a murder.",
     synopsis:
@@ -160,7 +152,7 @@ export async function generateMetadata({
 
   return {
     title: book.title,
-    description: `Review the overview, metadata, and writing progress for ${book.title}.`,
+    description: `Review the overview, metadata, and manuscript details for ${book.title}.`,
   };
 }
 
@@ -314,25 +306,6 @@ export default async function BookDetailsPage({ params }: PageProps<"/books/[boo
                 </div>
               ))}
             </dl>
-
-            <div className="mt-5">
-              <div className="flex items-center justify-between text-xs font-bold text-muted-foreground">
-                <span>Draft progress</span>
-                <span>
-                  {book.words} of {book.targetWords} words
-                </span>
-              </div>
-              <div
-                aria-label={`Draft progress: ${book.progress}%`}
-                aria-valuemax={100}
-                aria-valuemin={0}
-                aria-valuenow={book.progress}
-                className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
-                role="progressbar"
-              >
-                <div className="h-full w-[53%] rounded-full bg-primary" />
-              </div>
-            </div>
           </div>
         </section>
 

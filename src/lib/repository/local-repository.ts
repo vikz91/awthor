@@ -1,6 +1,9 @@
 import type { ZodType } from "zod";
 import type { AwthorRepository, ScopedCollectionRepository, ValueRepository } from "./contract";
 import {
+  appSettingsSchema,
+  bookSchema,
+  chapterSchema,
   characterSchema,
   noteSchema,
   onboardingDetailsSchema,
@@ -174,6 +177,13 @@ export function createLocalAwthorRepository(
       legacyProfileStorageKey,
     ),
     theme: new LocalThemeRepository(getStorage),
+    books: new LocalValueRepository(`${repositoryPrefix}:books`, bookSchema.array(), getStorage),
+    settings: new LocalValueRepository(
+      `${repositoryPrefix}:settings`,
+      appSettingsSchema,
+      getStorage,
+    ),
+    chapters: new LocalScopedCollectionRepository("chapters", chapterSchema.array(), getStorage),
     characters: new LocalScopedCollectionRepository(
       "characters",
       characterSchema.array(),
