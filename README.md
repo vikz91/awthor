@@ -7,6 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Bun](https://img.shields.io/badge/Bun-1.4.0-000000?logo=bun&logoColor=white)](https://bun.sh/)
+[![Node.js](https://img.shields.io/badge/Node.js-24.x-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Biome](https://img.shields.io/badge/Biome-2.4.2-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-4D7C0F?logo=gnu&logoColor=white)](LICENSE)
@@ -28,7 +29,11 @@ can be tested before client-side persistence and the editor are implemented.
 | `/onboarding` | Single-step author name, email, website, theme, and local-storage setup |
 | `/books` | Local library with manuscript statistics and four demo novels |
 | `/books/[bookId]` | Book overview with metadata, preface, series information, and manuscript statistics |
+| `/books/[bookId]/chapters` | Searchable chapter workspace with editable manuscript content and metadata |
 | `/books/[bookId]/characters` | Interactive mock character roster with editable dossiers and add, hide, and delete actions |
+| `/books/[bookId]/plots` | Plot-thread workspace with story beats, stakes, and character connections |
+| `/books/[bookId]/notes` | Searchable story notebook with categories, pinning, and archiving |
+| `/test` | Local-data lab for seeding, clearing, importing, and exporting browser data |
 
 ## Tech stack
 
@@ -42,10 +47,11 @@ can be tested before client-side persistence and the editor are implemented.
 | Variants and class composition | [CVA](https://cva.style/), [clsx](https://github.com/lukeed/clsx), and [tailwind-merge](https://github.com/dcastil/tailwind-merge) | Reusable variants and conflict-safe class composition |
 | Motion | [tw-animate-css](https://github.com/Wombosvideo/tw-animate-css) + [Motion Icons](https://www.npmjs.com/package/motion-icons-react) | Animation utilities and animated icon support |
 | Icons | [Lucide React](https://lucide.dev/) | Interface iconography |
-| Validation | [Zod 4](https://zod.dev/) | Planned runtime schema and form validation |
+| Validation | [Zod 4](https://zod.dev/) | Runtime validation for local repository data and backups |
 | Fonts | [`next/font`](https://nextjs.org/docs/app/getting-started/fonts) | Self-hosted Outfit, Nunito Sans, and Geist Mono |
 | Compiler | [React Compiler](https://react.dev/learn/react-compiler) | Automatic component optimization |
-| Tooling | [Bun](https://bun.sh/) | Package manager and script runtime |
+| Tooling | [Bun](https://bun.sh/) | Package manager and local script runtime |
+| Production runtime | [Node.js 24](https://nodejs.org/) | Stable Vercel builds and Functions runtime |
 | Quality | [Biome](https://biomejs.dev/) | Formatting, linting, import organization, React, and Next.js rules |
 | CSS pipeline | [PostCSS](https://postcss.org/) | Tailwind CSS compilation |
 | Deployment | [Vercel](https://vercel.com/) | Next.js hosting configuration through `vercel.json` |
@@ -65,7 +71,7 @@ can be tested before client-side persistence and the editor are implemented.
 Requirements:
 
 - [Bun 1.4+](https://bun.sh/docs/installation)
-- Node.js 20+ for editor and ecosystem compatibility
+- [Node.js 24](https://nodejs.org/) for parity with the production build runtime
 
 Install dependencies and start the development server:
 
@@ -101,7 +107,7 @@ src/
 biome.json               # Formatter and linter rules
 components.json          # shadcn configuration
 next.config.ts           # Next.js and React Compiler settings
-vercel.json              # Bun-based Vercel build configuration
+vercel.json              # Bun install and Node.js Vercel build configuration
 ```
 
 ## Code quality
@@ -119,8 +125,8 @@ bun run build
 
 ## Deploying to Vercel
 
-Import the repository into Vercel. The included `vercel.json` selects Next.js and uses Bun for
-install, development, and production build commands.
+Import the repository into Vercel. The included `vercel.json` selects Next.js, installs the frozen
+lockfile with Bun 1.4, and runs production builds and Functions on Node.js 24.
 
 Vercel hosts the application files and interface only. Awthor does not require a server-side
 manuscript database; writing data is intended to remain in browser storage on the user's device.
