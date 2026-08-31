@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { BackupReminder } from "@/components/backup-reminder";
 import { ThemeProvider } from "@/components/theme-provider";
+import { WebMcpSiteTools } from "@/components/webmcp-site-tools";
 import { themeBootstrapScript } from "@/lib/repository";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           {children}
           <BackupReminder />
+          <WebMcpSiteTools />
         </ThemeProvider>
       </body>
     </html>

@@ -52,6 +52,14 @@ import {
   type WorkspaceTool,
 } from "@/lib/repository";
 import { cn } from "@/lib/utils";
+import {
+  readRepositoryChange,
+  repositoryChangedEventName,
+  respondToWorkspaceCommand,
+  type WorkspaceCommand,
+  type WorkspaceCommandResult,
+  workspaceCommandEventName,
+} from "@/lib/webmcp/workspace-bridge";
 import { BookExport } from "./book-export";
 import { BookFloatingToolbar } from "./book-floating-toolbar";
 import { ChapterChooser } from "./chapter-chooser";
@@ -719,12 +727,12 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         currentChapterIdRef.current = null;
         setCurrentChapterId(null);
         setDraft("");
-        return;
+        return false;
       }
 
       if (chapter.id !== currentChapterIdRef.current) {
         if (!confirmToolTransition() || !(await flushCurrentDraft())) {
-          return;
+          return false;
         }
       }
 
@@ -761,6 +769,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         setSaveError("The last opened chapter could not be remembered.");
       });
       requestAnimationFrame(() => restoreCurrentScrollPosition(0));
+      return true;
     },
     [
       bookId,
@@ -867,25 +876,318 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     async (open: boolean) => {
       if (open) {
         if (!confirmToolTransition()) {
-          return;
+          return false;
         }
         if (!(await flushCurrentDraft())) {
-          return;
+          return false;
         }
         preserveInspectorPosition();
         setActiveTool(null);
         setSettingsOpen(false);
         setChapterChooserOpen(true);
         pushWorkspaceOverlay("chooser", { chooser: "chapters", tool: null, settings: null });
-        return;
+        return true;
       }
 
       preserveInspectorPosition();
       setChapterChooserOpen(false);
       closeOverlayQuery("chooser");
+      return true;
     },
     [closeOverlayQuery, confirmToolTransition, flushCurrentDraft, preserveInspectorPosition],
   );
+
+  const runWorkspaceCommand = useCallback(
+    async (command: WorkspaceCommand): Promise<WorkspaceCommandResult> => {
+      if (command.type === "prepare-data-change" || command.type === "leave") {
+        captureCaret();
+        if (!confirmToolTransition()) {
+          return {
+            ok: false,
+            error: {
+              code: "NAVIGATION_BLOCKED",
+              message: "Unsaved tool changes kept the current book open.",
+            },
+          };
+        }
+        if (!(await flushCurrentDraft())) {
+          return {
+            ok: false,
+            error: {
+              code: "SAVE_FAILED",
+              message: "The current chapter could not be saved.",
+            },
+          };
+        }
+        await rememberReadingPosition(true);
+        return { ok: true, type: command.type === "leave" ? "leave" : "prepared" };
+      }
+
+      if (command.type === "select-chapter") {
+        if (command.bookId !== bookId) {
+          return {
+            ok: false,
+            error: {
+              code: "NOT_IN_BOOK",
+              message: "The requested chapter belongs to a different open book.",
+            },
+          };
+        }
+        if (!chaptersRef.current.some((chapter) => chapter.id === command.chapterId)) {
+          const [nextChapters, nextBooks] = await Promise.all([
+            repository.chapters.list(bookId),
+            repository.books.get(),
+          ]);
+          updateChapters(nextChapters ?? []);
+          updateBook(nextBooks?.find((candidate) => candidate.id === bookId) ?? bookRef.current);
+        }
+        const selected = await selectChapter(command.chapterId);
+        return selected
+          ? { ok: true, type: "select-chapter" }
+          : {
+              ok: false,
+              error: {
+                code: "NAVIGATION_BLOCKED",
+                message: "The requested chapter could not be opened.",
+              },
+            };
+      }
+
+      if (command.type === "select-adjacent-chapter") {
+        if (command.bookId !== bookId) {
+          return {
+            ok: false,
+            error: {
+              code: "NOT_IN_BOOK",
+              message: "The requested chapter belongs to a different open book.",
+            },
+          };
+        }
+        const currentIndex = chaptersRef.current.findIndex(
+          (chapter) => chapter.id === currentChapterIdRef.current,
+        );
+        const adjacentChapter =
+          currentIndex < 0
+            ? null
+            : chaptersRef.current[currentIndex + (command.direction === "previous" ? -1 : 1)];
+        if (!adjacentChapter) {
+          return {
+            ok: false,
+            error: {
+              code: "CHAPTER_NOT_FOUND",
+              message: `There is no ${command.direction} chapter in this book.`,
+            },
+          };
+        }
+        const selected = await selectChapter(adjacentChapter.id);
+        return selected
+          ? {
+              ok: true,
+              type: "select-adjacent-chapter",
+              chapter: {
+                id: adjacentChapter.id,
+                number: adjacentChapter.number,
+                title: adjacentChapter.title,
+              },
+            }
+          : {
+              ok: false,
+              error: {
+                code: "NAVIGATION_BLOCKED",
+                message: "The adjacent chapter could not be opened.",
+              },
+            };
+      }
+
+      if (command.type === "open-chapter-list") {
+        if (command.bookId !== bookId) {
+          return {
+            ok: false,
+            error: {
+              code: "NOT_IN_BOOK",
+              message: "The requested chapter list belongs to a different open book.",
+            },
+          };
+        }
+        if (!chapterChooserOpen && !(await handleChooserOpenChange(true))) {
+          return {
+            ok: false,
+            error: {
+              code: "OVERLAY_BLOCKED",
+              message: "The chapter list could not be opened.",
+            },
+          };
+        }
+        return { ok: true, type: "open-chapter-list" };
+      }
+
+      let scrollElement: HTMLElement | null = null;
+      if (command.target === "chapter_list") {
+        if (!chapterChooserOpen && !(await handleChooserOpenChange(true))) {
+          return {
+            ok: false,
+            error: {
+              code: "OVERLAY_BLOCKED",
+              message: "The chapter list could not be opened.",
+            },
+          };
+        }
+        await nextAnimationFrame();
+        scrollElement = document.querySelector<HTMLElement>(
+          '[data-awthor-scroll-region="chapter-list"]',
+        );
+      } else {
+        scrollElement =
+          focusModeStateRef.current !== "off"
+            ? focusScrollRef.current
+            : (document.scrollingElement as HTMLElement | null);
+      }
+
+      if (!scrollElement) {
+        return {
+          ok: false,
+          error: {
+            code: "WORKSPACE_UNAVAILABLE",
+            message: "The requested scroll area is not available on this page.",
+          },
+        };
+      }
+
+      const maxScroll = Math.max(scrollElement.scrollHeight - scrollElement.clientHeight, 0);
+      const from = maxScroll === 0 ? 0 : scrollElement.scrollTop / maxScroll;
+      const distanceFactor =
+        command.distance === "small" ? 0.25 : command.distance === "half_page" ? 0.5 : 0.85;
+      const distance = scrollElement.clientHeight * distanceFactor;
+      const targetTop =
+        command.action === "start"
+          ? 0
+          : command.action === "end"
+            ? maxScroll
+            : Math.min(
+                maxScroll,
+                Math.max(
+                  0,
+                  scrollElement.scrollTop + (command.action === "down" ? distance : -distance),
+                ),
+              );
+
+      scrollElement.scrollTo({ behavior: "auto", top: targetTop });
+      const to = maxScroll === 0 ? 0 : targetTop / maxScroll;
+      return {
+        ok: true,
+        type: "scroll",
+        target: command.target,
+        from,
+        to,
+        atStart: targetTop <= 0,
+        atEnd: maxScroll === 0 || targetTop >= maxScroll,
+      };
+    },
+    [
+      bookId,
+      captureCaret,
+      chapterChooserOpen,
+      confirmToolTransition,
+      flushCurrentDraft,
+      handleChooserOpenChange,
+      rememberReadingPosition,
+      repository,
+      selectChapter,
+      updateBook,
+      updateChapters,
+    ],
+  );
+
+  useEffect(() => {
+    function handleWorkspaceCommand(event: Event) {
+      respondToWorkspaceCommand(event, runWorkspaceCommand);
+    }
+
+    window.addEventListener(workspaceCommandEventName, handleWorkspaceCommand);
+    return () => window.removeEventListener(workspaceCommandEventName, handleWorkspaceCommand);
+  }, [runWorkspaceCommand]);
+
+  const refreshWorkspaceFromRepository = useCallback(async () => {
+    const scrollPosition = currentScrollPosition();
+    const activeChapterId = currentChapterIdRef.current;
+    const data = await repository.getData();
+    const nextBook = data.books.find((item) => item.id === bookId) ?? null;
+
+    updateSettings(data.settings);
+    setDocumentLayout(data.settings.editor.layout);
+    setProofreadingPreferences(
+      resolveBookProofreadingSettings(data.settings, data.profile, bookId),
+    );
+
+    if (!nextBook) {
+      autosaveRef.current?.cancel();
+      updateBook(null);
+      updateChapters([]);
+      currentChapterIdRef.current = null;
+      setCurrentChapterId(null);
+      setDraft("");
+      setLoadState("book-missing");
+      return;
+    }
+
+    const nextChapters = data.chapters[bookId] ?? [];
+    const selectedChapter =
+      nextChapters.find((chapter) => chapter.id === activeChapterId) ?? nextChapters[0] ?? null;
+    autosaveRef.current?.cancel();
+    updateBook(nextBook);
+    updateChapters(nextChapters);
+    currentChapterIdRef.current = selectedChapter?.id ?? null;
+    setCurrentChapterId(selectedChapter?.id ?? null);
+    setMissingChapterId(null);
+    setDraft(
+      selectedChapter ? withLeadingMarkdownTitle(selectedChapter.body, selectedChapter.title) : "",
+    );
+    setSaveError(null);
+    setSaveState("clean");
+    setLoadState("ready");
+
+    if (selectedChapter) {
+      replaceWorkspaceQuery({ chapter: selectedChapter.id });
+    }
+    requestAnimationFrame(() => restoreCurrentScrollPosition(scrollPosition));
+  }, [
+    bookId,
+    currentScrollPosition,
+    repository,
+    restoreCurrentScrollPosition,
+    updateBook,
+    updateChapters,
+    updateSettings,
+  ]);
+
+  useEffect(() => {
+    function handleRepositoryChanged(event: Event) {
+      const change = readRepositoryChange(event);
+      if (!change || (change.bookId && change.bookId !== bookId)) {
+        return;
+      }
+
+      if (change.operation === "import-data") {
+        setActiveTool(null);
+        setSettingsOpen(false);
+        setChapterChooserOpen(false);
+        setMode("read");
+        replaceWorkspaceQuery({ chooser: null, settings: null, tool: null });
+      }
+
+      void refreshWorkspaceFromRepository().catch((reason) => {
+        setSaveError(
+          reason instanceof Error
+            ? reason.message
+            : "The updated local book could not be refreshed.",
+        );
+        setSaveState("error");
+      });
+    }
+
+    window.addEventListener(repositoryChangedEventName, handleRepositoryChanged);
+    return () => window.removeEventListener(repositoryChangedEventName, handleRepositoryChanged);
+  }, [bookId, refreshWorkspaceFromRepository]);
 
   const clearFullscreenVerification = useCallback(() => {
     if (fullscreenVerificationTimerRef.current) {
@@ -1670,7 +1972,9 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         onMove={moveChapter}
         onOpenChange={(open) => void handleChooserOpenChange(open)}
         onRename={renameChapter}
-        onSelect={selectChapter}
+        onSelect={async (chapterId) => {
+          await selectChapter(chapterId);
+        }}
         open={chapterChooserOpen}
       />
       <SettingsInspector
@@ -2024,4 +2328,8 @@ function restoreNormalizedScrollPosition(position: number) {
 function restoreNormalizedElementScrollPosition(element: HTMLElement, position: number) {
   const scrollableHeight = Math.max(element.scrollHeight - element.clientHeight, 0);
   element.scrollTo({ top: scrollableHeight * Math.min(1, Math.max(0, position)) });
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }

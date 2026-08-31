@@ -10,6 +10,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-24.x-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Biome](https://img.shields.io/badge/Biome-2.4.2-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Harper](https://img.shields.io/badge/Proofreading-Harper.js-D97706)](https://writewithharper.com/)
+[![WebMCP](https://img.shields.io/badge/WebMCP-Site_Tools-C2412D)](https://learn.chatgpt.com/docs/webmcp)
 [![Markdown](https://img.shields.io/badge/Editor-GFM-000000?logo=markdown&logoColor=white)](https://github.github.com/gfm/)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-4D7C0F?logo=gnu&logoColor=white)](LICENSE)
@@ -127,6 +128,55 @@ host under the same rules.
 Because data belongs to one browser origin, export backups regularly before clearing site data,
 changing browsers, or moving devices.
 
+## WebMCP Site Tools
+
+Awthor exposes a deliberately narrow set of local [WebMCP Site
+Tools](https://learn.chatgpt.com/docs/webmcp) when it is opened in a compatible top-level AI
+browser. There is no MCP server, API key, Awthor account, or remote data bridge: the tools execute
+inside the open page and reuse `AwthorRepository` against that browser's IndexedDB data. Ordinary
+browsers feature-detect the API and continue without registering anything.
+
+### Using Awthor with ChatGPT
+
+Use **ChatGPT Work** or **Codex** in the latest ChatGPT desktop app—not ordinary Chat mode. Select
+GPT-5.6 Sol or Terra, enable **Site tools** under **Settings → Browser → Permissions**, and open
+Awthor in the built-in browser. Keep the page open while working: choose **Site tools** in the
+address bar to inspect the available actions. The WebMCP host may apply its own safety review before
+each tool invocation.
+
+For local development, run `bun dev` and open `http://localhost:3000` in that same built-in
+browser; a public deployment or tunnel is not required. Browser storage is intentionally scoped to
+the current origin and browser profile, so local-development data, deployed-site data, and regular
+browser data are separate. Export and import a backup when moving between them.
+
+WebMCP is page-scoped browser integration, not a direct MCP connection. Regular ChatGPT on the web
+or mobile cannot invoke these site tools, and neither ChatGPT Work nor Codex can use them after the
+Awthor page is closed or navigated away. A standalone local MCP server would be needed for that
+different, page-independent workflow.
+
+The registered tools can:
+
+- list local books, inspect a book's ordered chapter metadata, and read a specifically requested
+  chapter's Markdown source
+- create a book with optional author, series, and remote cover metadata
+- add a chapter and update an existing book or Markdown chapter
+- download a complete unencrypted JSON backup or import one after explicit replacement confirmation
+- go back, go home, open the library, or visit a validated local book and chapter
+- move to the previous or next chapter, open the chapter list, or scroll the open manuscript or
+  chapter-list dialog
+
+Every book/chapter route is built from repository-validated immutable IDs; no tool accepts an
+arbitrary URL. An open draft is flushed through the existing autosave path before data changes or
+navigation, and mounted library/workspace screens refresh after an agent-side mutation. Export
+returns only counts and download metadata to the assistant—not manuscript text. Import necessarily
+passes the supplied backup text through the tool call, so use it only in a trusted AI session.
+`awthor_get_chapter` is the explicit exception: it returns the requested chapter's Markdown source
+to the assistant, so it is available only when the AI host invokes that named tool.
+
+This first version intentionally has no delete, character, proofreading, arbitrary navigation, or
+general storage tool. WebMCP support and availability depend on the browser or AI host implementing
+the evolving API.
+
 ## Themes
 
 Awthor supports two token-driven themes:
@@ -148,6 +198,7 @@ states so both themes retain the same layout and accessible interaction states.
 | Components | [shadcn](https://ui.shadcn.com/) + [Base UI](https://base-ui.com/) | Accessible, locally owned primitives and drawers/dialogs |
 | Markdown | [`react-markdown`](https://github.com/remarkjs/react-markdown) + [`remark-gfm`](https://github.com/remarkjs/remark-gfm) | Safe Markdown and GFM rendering without raw HTML |
 | Proofreading | [Harper.js](https://writewithharper.com/) | Lazy, worker-backed, on-device writing feedback |
+| AI browser tools | [WebMCP Site Tools](https://learn.chatgpt.com/docs/webmcp) | Feature-detected local book, chapter, backup, navigation, and scroll actions |
 | Validation | [Zod 4](https://zod.dev/) | Runtime validation and backup/migration parsing |
 | Backup archives | [`fflate`](https://github.com/101arrowz/fflate) | Client-only ZIP creation and extraction for portable local backups |
 | Icons | [Lucide React](https://lucide.dev/) + [Motion Icons](https://www.npmjs.com/package/motion-icons-react) | Interface iconography |
@@ -213,7 +264,8 @@ src/
     ├── backup/               # ZIP archive creation, validation, and legacy backup detection
     ├── markdown/             # Counting and URL-safety helpers
     ├── proofreading/         # Engine-neutral service plus Harper adapter
-    └── repository/           # Product contract, IndexedDB v3, migration, autosave, and seed data
+    ├── repository/           # Product contract, IndexedDB v3, migration, autosave, and seed data
+    └── webmcp/               # Site-tool schemas, registration lifecycle, and workspace bridge
 ```
 
 `next.config.ts` owns legacy redirects, `biome.json` owns formatting and lint rules,
