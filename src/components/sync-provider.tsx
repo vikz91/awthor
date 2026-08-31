@@ -12,9 +12,10 @@ import {
   useState,
 } from "react";
 import { useSyncAccountConfigured } from "@/components/auth-provider";
-import { getAwthorRepository } from "@/lib/repository";
+import { getAwthorRepository, repositoryDeletedEventName } from "@/lib/repository";
 import { syncRepository } from "@/lib/sync/client";
 import { readSyncDeviceState, writeSyncDeviceState } from "@/lib/sync/device-state";
+import { queueSyncDeletions, type SyncDeletion } from "@/lib/sync/records";
 import type { SyncDeviceState, SyncStatus } from "@/lib/sync/types";
 
 const repository = getAwthorRepository();
@@ -123,6 +124,21 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
     const onMutation = () => {
       if (!applyingRemoteChange.current) schedule();
     };
+    const onDeletion = (event: Event) => {
+      if (applyingRemoteChange.current) return;
+      const deletions = (event as CustomEvent<readonly SyncDeletion[]>).detail;
+      if (!Array.isArray(deletions) || deletions.length === 0) return;
+      const state = stateRef.current ?? readSyncDeviceState(window.localStorage);
+      void queueSyncDeletions(state, deletions, new Date().toISOString())
+        .then((next) => {
+          stateRef.current = next;
+          writeSyncDeviceState(window.localStorage, next);
+          schedule();
+        })
+        .catch(() => {
+          setStatus("error");
+        });
+    };
     if (!initialAutoSyncHandled.current) {
       initialAutoSyncHandled.current = true;
       if (lastSuccessfulSyncAt) schedule();
@@ -130,12 +146,14 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
     window.addEventListener("online", onOnline);
     window.addEventListener("focus", onOnline);
     window.addEventListener("awthor:repository-mutated", onMutation);
+    window.addEventListener(repositoryDeletedEventName, onDeletion);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       if (timer !== null) window.clearTimeout(timer);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("focus", onOnline);
       window.removeEventListener("awthor:repository-mutated", onMutation);
+      window.removeEventListener(repositoryDeletedEventName, onDeletion);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [isLoaded, isSignedIn, lastSuccessfulSyncAt, syncNow, syncStateLoaded]);

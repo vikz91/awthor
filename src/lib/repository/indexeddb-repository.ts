@@ -51,6 +51,7 @@ import {
 export const indexedDbRepositorySchemaVersion = 3;
 export const indexedDbRepositoryPrefix = `awthor:repository:v${indexedDbRepositorySchemaVersion}`;
 export const indexedDbDatabaseName = "awthor";
+export const repositoryDeletedEventName = "awthor:repository-deleted";
 
 const databaseVersion = 1;
 const profileKey = `${indexedDbRepositoryPrefix}:profile`;
@@ -76,6 +77,10 @@ type StoredEnvelope = {
 
 type StoredChapter = Chapter & { bookId: string };
 type StoredCharacter = Character & { bookId: string };
+type RepositoryDeletedRecord = {
+  recordId: string;
+  recordType: "book" | "chapter" | "character";
+};
 type BookSettingsRecord = {
   bookId: string;
   lastChapterId: string | null;
@@ -191,6 +196,16 @@ function mutateLocalStorage(
       }
     }
     throw normalizeStorageError("Local settings could not be saved.", error);
+  }
+}
+
+function announceDeletedRecords(records: readonly RepositoryDeletedRecord[]) {
+  if (records.length > 0 && typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent<readonly RepositoryDeletedRecord[]>(repositoryDeletedEventName, {
+        detail: records,
+      }),
+    );
   }
 }
 
@@ -716,12 +731,24 @@ class IndexedDbAwthorRepository implements AwthorRepository {
   }
 
   async deleteBook(bookId: string): Promise<void> {
+    const deletedRecords: RepositoryDeletedRecord[] = [];
     await this.runMutation(async () => {
       await this.requireReady();
       const data = await this.getDataRaw();
       if (!data.books.some((book) => book.id === bookId)) {
         return;
       }
+      deletedRecords.push(
+        { recordId: bookId, recordType: "book" },
+        ...(data.chapters[bookId] ?? []).map((chapter) => ({
+          recordId: `${bookId}:${chapter.id}`,
+          recordType: "chapter" as const,
+        })),
+        ...(data.characters[bookId] ?? []).map((character) => ({
+          recordId: `${bookId}:${character.id}`,
+          recordType: "character" as const,
+        })),
+      );
       data.books = data.books.filter((book) => book.id !== bookId);
       delete data.chapters[bookId];
       delete data.characters[bookId];
@@ -733,6 +760,7 @@ class IndexedDbAwthorRepository implements AwthorRepository {
       }
       await this.replaceDataRaw(data);
     });
+    announceDeletedRecords(deletedRecords);
   }
 
   async createChapter(bookId: string, input: CreateChapterInput = {}): Promise<Chapter> {
@@ -843,6 +871,7 @@ class IndexedDbAwthorRepository implements AwthorRepository {
       }
       await this.replaceDataRaw(data);
     });
+    announceDeletedRecords([{ recordId: `${bookId}:${chapterId}`, recordType: "chapter" }]);
   }
 
   saveManuscript(
@@ -928,15 +957,19 @@ class IndexedDbAwthorRepository implements AwthorRepository {
   }
 
   async deleteCharacter(bookId: string, characterId: string): Promise<void> {
+    let deleted = false;
     await this.runMutation(async () => {
       await this.requireReady();
       const data = await this.getDataRaw();
       this.requireBookIndex(data, bookId);
-      data.characters[bookId] = (data.characters[bookId] ?? []).filter(
-        (character) => character.id !== characterId,
-      );
+      const characters = data.characters[bookId] ?? [];
+      deleted = characters.some((character) => character.id === characterId);
+      data.characters[bookId] = characters.filter((character) => character.id !== characterId);
       await this.replaceDataRaw(data);
     });
+    if (deleted) {
+      announceDeletedRecords([{ recordId: `${bookId}:${characterId}`, recordType: "character" }]);
+    }
   }
 
   async getData(): Promise<RepositoryData> {

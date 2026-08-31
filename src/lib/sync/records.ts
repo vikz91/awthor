@@ -7,7 +7,13 @@ import {
   type RepositoryData,
   themeSchema,
 } from "@/lib/repository";
-import type { SyncDeviceState, SyncedRecord, SyncRecord, SyncRecordState } from "./types";
+import type {
+  SyncDeviceState,
+  SyncedRecord,
+  SyncRecord,
+  SyncRecordState,
+  SyncRecordType,
+} from "./types";
 
 function recordKey(recordType: SyncRecord["recordType"], recordId: string) {
   return `${recordType}:${recordId}`;
@@ -41,6 +47,41 @@ function toState(record: Pick<SyncRecord, keyof SyncRecordState>): SyncRecordSta
     recordId: record.recordId,
     recordType: record.recordType,
   };
+}
+
+export type SyncDeletion = {
+  recordId: string;
+  recordType: SyncRecordType;
+};
+
+/** Records a deletion only when the product explicitly reports one. */
+export async function queueSyncDeletions(
+  state: SyncDeviceState,
+  deletions: readonly SyncDeletion[],
+  now: string,
+): Promise<SyncDeviceState> {
+  const nextState: SyncDeviceState = {
+    ...state,
+    pendingDeletes: { ...state.pendingDeletes },
+    records: { ...state.records },
+  };
+
+  for (const deletion of deletions) {
+    const key = recordKey(deletion.recordType, deletion.recordId);
+    if (nextState.pendingDeletes[key]) continue;
+    const contentHash = await createSyncContentHash(null);
+    nextState.pendingDeletes[key] = {
+      baseCursor: state.cursor,
+      contentHash,
+      deleted: true,
+      deviceId: state.deviceId,
+      modifiedAt: now,
+      recordId: deletion.recordId,
+      recordType: deletion.recordType,
+    };
+  }
+
+  return nextState;
 }
 
 function currentRecords(data: RepositoryData) {
@@ -111,13 +152,20 @@ export async function createSyncSnapshot(
 ) {
   const records = currentRecords(data);
   const currentKeys = new Set<string>();
-  const nextState: SyncDeviceState = { ...state, records: { ...state.records } };
+  const nextState: SyncDeviceState = {
+    ...state,
+    pendingDeletes: { ...state.pendingDeletes },
+    records: { ...state.records },
+  };
   const changedRecords: SyncRecord[] = [];
 
   for (const record of records) {
     const key = recordKey(record.recordType, record.recordId);
     currentKeys.add(key);
     const existing = nextState.records[key];
+    if (nextState.pendingDeletes[key]) {
+      delete nextState.pendingDeletes[key];
+    }
     const contentHash = await createSyncContentHash(record.payload);
     if (!existing || existing.deleted || existing.contentHash !== contentHash) {
       const sourceUpdatedAt =
@@ -138,20 +186,11 @@ export async function createSyncSnapshot(
     }
   }
 
-  for (const [key, existing] of Object.entries(nextState.records)) {
-    if (!currentKeys.has(key) && !existing.deleted) {
-      const changed: SyncRecord = {
-        contentHash: await createSyncContentHash(null),
-        deleted: true,
-        deviceId: state.deviceId,
-        modifiedAt: now,
-        payload: null,
-        recordId: existing.recordId,
-        recordType: existing.recordType,
-      };
-      nextState.records[key] = toState(changed);
-      changedRecords.push(changed);
-    }
+  for (const [key, deletion] of Object.entries(nextState.pendingDeletes)) {
+    if (currentKeys.has(key)) continue;
+    const changed: SyncRecord = { ...deletion, payload: null };
+    nextState.records[key] = toState(changed);
+    changedRecords.push(changed);
   }
 
   return { changedRecords, state: nextState };
@@ -173,7 +212,11 @@ export function applySyncRecords(
   canonicalRecords: readonly SyncedRecord[],
 ) {
   const next = structuredClone(data);
-  const nextState: SyncDeviceState = { ...currentState, records: { ...currentState.records } };
+  const nextState: SyncDeviceState = {
+    ...currentState,
+    pendingDeletes: { ...currentState.pendingDeletes },
+    records: { ...currentState.records },
+  };
   const books = new Map(next.books.map((book) => [book.id, book]));
   let changed = false;
 
@@ -182,11 +225,16 @@ export function applySyncRecords(
     const local = nextState.records[key];
     if (local && compareSyncRecords(local, remote) > 0) continue;
     nextState.records[key] = toState(remote);
+    if (remote.deleted) {
+      delete nextState.pendingDeletes[key];
+    }
+    const localRecordIsMissing = isLocalRecordMissing(next, books, remote);
     if (
       local &&
       local.deleted === remote.deleted &&
       local.contentHash !== "" &&
-      local.contentHash === remote.contentHash
+      local.contentHash === remote.contentHash &&
+      !localRecordIsMissing
     ) {
       continue;
     }
@@ -237,4 +285,27 @@ export function applySyncRecords(
   next.books = [...books.values()];
   changed = normalizeChapterNumbers(next.chapters) || changed;
   return { changed, data: next, state: nextState };
+}
+
+function isLocalRecordMissing(
+  data: RepositoryData,
+  books: ReadonlyMap<string, unknown>,
+  record: SyncedRecord,
+) {
+  if (record.deleted) return false;
+  if (record.recordType === "profile") return data.profile === null;
+  if (record.recordType === "book") return !books.has(record.recordId);
+  if (record.recordType === "chapter") {
+    const bookId =
+      (record.payload as { bookId?: string } | null)?.bookId ?? record.recordId.split(":", 1)[0];
+    const chapterId = record.recordId.split(":").at(-1);
+    return !(data.chapters[bookId] ?? []).some((chapter) => chapter.id === chapterId);
+  }
+  if (record.recordType === "character") {
+    const bookId =
+      (record.payload as { bookId?: string } | null)?.bookId ?? record.recordId.split(":", 1)[0];
+    const characterId = record.recordId.split(":").at(-1);
+    return !(data.characters[bookId] ?? []).some((character) => character.id === characterId);
+  }
+  return false;
 }

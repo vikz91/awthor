@@ -2,6 +2,7 @@ import type { AwthorRepository } from "@/lib/repository";
 import { applySyncRecords, createSyncSnapshot } from "./records";
 import {
   type SyncDeviceState,
+  type SyncedRecord,
   type SyncRecord,
   syncPullResponseSchema,
   syncPushResponseSchema,
@@ -46,7 +47,11 @@ async function requestJson(url: string, init?: RequestInit) {
   return body;
 }
 
-/** Synchronizes only local changes, then applies the cursor-based remote delta. */
+/**
+ * Pulls cloud changes before uploading local intent. A missing local record is
+ * never a deletion by itself; only repository-reported deletion intents may
+ * produce tombstones.
+ */
 export async function syncRepository({
   onApplyingRemoteChange,
   repository,
@@ -57,36 +62,49 @@ export async function syncRepository({
   state: SyncDeviceState;
 }) {
   const now = new Date().toISOString();
-  const snapshot = await createSyncSnapshot(await repository.getData(), state, now);
-  let cursor = snapshot.state.cursor;
-  const canonical = [];
+  const localData = await repository.getData();
+  const localSnapshot = await createSyncSnapshot(localData, state, now);
+  const pulled = await pullSyncRecords(state.cursor);
+  const afterPull = applySyncRecords(localData, localSnapshot.state, pulled.records);
 
-  for (const records of createSyncBatches(snapshot.changedRecords)) {
+  if (afterPull.changed) {
+    onApplyingRemoteChange?.(true);
+    try {
+      await repository.replaceData(afterPull.data);
+    } finally {
+      onApplyingRemoteChange?.(false);
+    }
+  }
+
+  const postPullSnapshot = await createSyncSnapshot(
+    afterPull.data,
+    afterPull.state,
+    new Date().toISOString(),
+  );
+  const outgoing = reconcileOutgoingRecords(
+    localSnapshot.changedRecords,
+    postPullSnapshot.changedRecords,
+    postPullSnapshot.state,
+  );
+  const canonical = [];
+  const acknowledgedDeletes = new Set<string>();
+  let cursor = pulled.cursor;
+
+  for (const records of createSyncBatches(outgoing)) {
     const body = await requestJson("/api/sync/push", {
-      body: JSON.stringify({ records }),
+      body: JSON.stringify({ baseCursor: state.cursor, records }),
       headers: { "content-type": "application/json" },
       method: "POST",
     });
     const parsed = syncPushResponseSchema.parse(body);
     canonical.push(...parsed.records);
     cursor = Math.max(cursor, parsed.cursor);
+    for (const record of records) {
+      if (record.deleted) acknowledgedDeletes.add(`${record.recordType}:${record.recordId}`);
+    }
   }
 
-  let pullCursor = snapshot.state.cursor;
-  let hasMore = true;
-  while (hasMore) {
-    const pulled = syncPullResponseSchema.parse(
-      await requestJson(`/api/sync/pull?cursor=${String(pullCursor)}`),
-    );
-    canonical.push(...pulled.records);
-    cursor = Math.max(cursor, pulled.cursor);
-    pullCursor = pulled.cursor;
-    hasMore = pulled.hasMore;
-  }
-
-  const latest = await repository.getData();
-  const current = await createSyncSnapshot(latest, snapshot.state, new Date().toISOString());
-  const applied = applySyncRecords(latest, current.state, canonical);
+  const applied = applySyncRecords(afterPull.data, postPullSnapshot.state, canonical);
   if (applied.changed) {
     onApplyingRemoteChange?.(true);
     try {
@@ -102,5 +120,41 @@ export async function syncRepository({
     lastAttemptAt: now,
     lastError: null,
     lastSuccessfulSyncAt: new Date().toISOString(),
+    pendingDeletes: Object.fromEntries(
+      Object.entries(applied.state.pendingDeletes).filter(([key]) => !acknowledgedDeletes.has(key)),
+    ),
   };
+}
+
+async function pullSyncRecords(cursor: number) {
+  const records: SyncedRecord[] = [];
+  let nextCursor = cursor;
+  let hasMore = true;
+  while (hasMore) {
+    const pulled = syncPullResponseSchema.parse(
+      await requestJson(`/api/sync/pull?cursor=${String(nextCursor)}`),
+    );
+    records.push(...pulled.records);
+    nextCursor = pulled.cursor;
+    hasMore = pulled.hasMore;
+  }
+  return { cursor: nextCursor, records };
+}
+
+function reconcileOutgoingRecords(
+  prePullRecords: readonly SyncRecord[],
+  postPullRecords: readonly SyncRecord[],
+  state: SyncDeviceState,
+) {
+  const outgoing = new Map<string, SyncRecord>();
+  for (const record of prePullRecords) {
+    const current = state.records[`${record.recordType}:${record.recordId}`];
+    if (current?.contentHash === record.contentHash && current.deviceId === record.deviceId) {
+      outgoing.set(`${record.recordType}:${record.recordId}`, record);
+    }
+  }
+  for (const record of postPullRecords) {
+    outgoing.set(`${record.recordType}:${record.recordId}`, record);
+  }
+  return [...outgoing.values()];
 }

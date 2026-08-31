@@ -40,12 +40,18 @@ export const syncRecordStateSchema = z.object({
 });
 export type SyncRecordState = z.infer<typeof syncRecordStateSchema>;
 
+export const syncDeleteIntentSchema = syncRecordStateSchema.extend({
+  baseCursor: z.number().int().nonnegative(),
+});
+export type SyncDeleteIntent = z.infer<typeof syncDeleteIntentSchema>;
+
 export const syncedRecordSchema = syncRecordSchema.extend({
   serverRevision: z.number().int().nonnegative(),
 });
 export type SyncedRecord = z.infer<typeof syncedRecordSchema>;
 
 export const syncPushRequestSchema = z.object({
+  baseCursor: z.number().int().nonnegative(),
   records: syncRecordSchema.array().min(1).max(50),
 });
 
@@ -68,6 +74,7 @@ export type SyncDeviceState = {
   lastAttemptAt: string | null;
   lastError: string | null;
   lastSuccessfulSyncAt: string | null;
+  pendingDeletes: Record<string, SyncDeleteIntent>;
   records: Record<string, SyncRecordState>;
 };
 
@@ -77,5 +84,6 @@ export const syncDeviceStateSchema = z.object({
   lastAttemptAt: z.string().datetime().nullable().default(null),
   lastError: z.string().nullable().default(null),
   lastSuccessfulSyncAt: z.string().datetime().nullable().default(null),
+  pendingDeletes: z.record(z.string(), syncDeleteIntentSchema).default({}),
   records: z.record(z.string(), syncRecordStateSchema).default({}),
 });

@@ -1,6 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { getAwthorDatabase } from "@/lib/database/mongodb";
-import { ensureSyncIndexes, pushSyncRecords } from "@/lib/database/sync-records";
+import {
+  ensureSyncIndexes,
+  pushSyncRecords,
+  StaleSyncDeletionError,
+} from "@/lib/database/sync-records";
 import { syncPushRequestSchema } from "@/lib/sync/types";
 
 export const runtime = "nodejs";
@@ -15,8 +19,15 @@ export async function POST(request: Request) {
   try {
     const database = await getAwthorDatabase();
     await ensureSyncIndexes(database);
-    return Response.json(await pushSyncRecords(database, userId, parsed.data.records));
+    return Response.json(
+      await pushSyncRecords(database, userId, parsed.data.records, {
+        baseCursor: parsed.data.baseCursor,
+      }),
+    );
   } catch (error) {
+    if (error instanceof StaleSyncDeletionError) {
+      return Response.json({ error: error.message }, { status: 409 });
+    }
     return Response.json(
       { error: error instanceof Error ? error.message : "Sync is unavailable." },
       { status: 503 },

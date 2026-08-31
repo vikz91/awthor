@@ -20,6 +20,7 @@ export {
   indexedDbDatabaseName,
   indexedDbRepositoryPrefix,
   indexedDbRepositorySchemaVersion,
+  repositoryDeletedEventName,
 } from "./indexeddb-repository";
 export {
   legacyRepositoryPrefix,

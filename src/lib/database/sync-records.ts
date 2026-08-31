@@ -7,6 +7,13 @@ import { type SyncedRecord, type SyncRecord, syncedRecordSchema } from "@/lib/sy
 type StoredSyncRecord = SyncedRecord & { userId: string };
 type SyncCounter = { _id: "syncRecords"; value: number };
 
+export class StaleSyncDeletionError extends Error {
+  constructor() {
+    super("A newer cloud version was restored. Review it before deleting again.");
+    this.name = "StaleSyncDeletionError";
+  }
+}
+
 const initializedDatabases = new Map<string, Promise<void>>();
 
 function collection(database: Db): Collection<StoredSyncRecord> {
@@ -80,7 +87,7 @@ export async function pushSyncRecords(
   database: Db,
   userId: string,
   records: readonly SyncRecord[],
-  options: { session?: ClientSession } = {},
+  options: { baseCursor?: number; session?: ClientSession } = {},
 ) {
   const recordsCollection = collection(database);
   const winners: SyncedRecord[] = [];
@@ -99,6 +106,14 @@ export async function pushSyncRecords(
       },
       { session: options.session },
     );
+    if (
+      canonicalRecord.deleted &&
+      existing &&
+      options.baseCursor !== undefined &&
+      existing.serverRevision > options.baseCursor
+    ) {
+      throw new StaleSyncDeletionError();
+    }
     const incomingWins = !existing || compareSyncRecords(canonicalRecord, existing) > 0;
     const winner = incomingWins
       ? { ...canonicalRecord, serverRevision: await nextServerRevision(database, options.session) }
