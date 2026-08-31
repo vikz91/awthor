@@ -10,6 +10,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-24.x-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Biome](https://img.shields.io/badge/Biome-2.4.2-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Harper](https://img.shields.io/badge/Proofreading-Harper.js-D97706)](https://writewithharper.com/)
+[![Clerk](https://img.shields.io/badge/Optional_Accounts-Clerk-6C47FF?logo=clerk&logoColor=white)](https://clerk.com/)
 [![WebMCP](https://img.shields.io/badge/WebMCP-Site_Tools-C2412D)](https://learn.chatgpt.com/docs/webmcp)
 [![Markdown](https://img.shields.io/badge/Editor-GFM-000000?logo=markdown&logoColor=white)](https://github.github.com/gfm/)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
@@ -20,6 +21,10 @@ Awthor is a deliberately minimal writing workspace. The hosted application does 
 manuscripts in an Awthor server database: books, chapters, characters, settings, and reading
 positions remain in the current browser. IndexedDB stores book-domain records while localStorage
 is limited to small bootstrap and global-preference values.
+
+Awthor is local-first by default: no account is required to write. An optional email account
+foundation is available for the future sync release, but signing in today does not upload any books,
+profile details, settings, or manuscript content.
 
 There is no pricing tier. Awthor is completely free and distributed under the
 [GNU Affero General Public License v3.0](LICENSE).
@@ -128,6 +133,26 @@ host under the same rules.
 Because data belongs to one browser origin, export backups regularly before clearing site data,
 changing browsers, or moving devices.
 
+### Optional accounts and future sync
+
+Awthor uses [Clerk](https://clerk.com/) for the optional account foundation. It supports email
+verification codes only; passwords and social providers are intentionally not enabled. Creating an
+account is voluntary and prepares identity for a future multi-device sync and authenticated remote
+MCP service. It does not change `AwthorRepository`, upload local data, or connect an account email
+to the separate author-profile email.
+
+To enable the account controls in a deployment, configure both values below in the deployment
+environment. When either one is absent, Awthor remains fully functional and local-only.
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
+CLERK_SECRET_KEY=sk_...
+```
+
+In the Clerk dashboard, keep only **Email verification code** enabled. The future sync service will
+use Clerk's immutable user ID to isolate each author's cloud workspace; it will be introduced only
+with explicit sync consent and a separate privacy update.
+
 ## WebMCP Site Tools
 
 Awthor exposes a deliberately narrow set of local [WebMCP Site
@@ -175,7 +200,8 @@ to the assistant, so it is available only when the AI host invokes that named to
 
 This first version intentionally has no delete, character, proofreading, arbitrary navigation, or
 general storage tool. WebMCP support and availability depend on the browser or AI host implementing
-the evolving API.
+the evolving API. It remains page-scoped and local-only; a future remote MCP service requires the
+separate optional cloud-sync release.
 
 ## Themes
 
@@ -198,6 +224,7 @@ states so both themes retain the same layout and accessible interaction states.
 | Components | [shadcn](https://ui.shadcn.com/) + [Base UI](https://base-ui.com/) | Accessible, locally owned primitives and drawers/dialogs |
 | Markdown | [`react-markdown`](https://github.com/remarkjs/react-markdown) + [`remark-gfm`](https://github.com/remarkjs/remark-gfm) | Safe Markdown and GFM rendering without raw HTML |
 | Proofreading | [Harper.js](https://writewithharper.com/) | Lazy, worker-backed, on-device writing feedback |
+| Optional accounts | [Clerk](https://clerk.com/) | Email-code identity foundation for future opt-in sync |
 | AI browser tools | [WebMCP Site Tools](https://learn.chatgpt.com/docs/webmcp) | Feature-detected local book, chapter, backup, navigation, and scroll actions |
 | Validation | [Zod 4](https://zod.dev/) | Runtime validation and backup/migration parsing |
 | Backup archives | [`fflate`](https://github.com/101arrowz/fflate) | Client-only ZIP creation and extraction for portable local backups |

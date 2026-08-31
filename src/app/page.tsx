@@ -2,6 +2,7 @@ import {
   ArrowRight,
   BookOpenText,
   Check,
+  Cloud,
   Code2,
   ExternalLink,
   Focus,
@@ -13,6 +14,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
+import { SyncAccountAction } from "@/components/sync-account-action";
 
 const features = [
   {
@@ -32,6 +34,12 @@ const features = [
     title: "Comfortable in any light",
     description:
       "Choose warm Paper or low-glare Stone for a comfortable writing space at any hour.",
+  },
+  {
+    icon: Cloud,
+    title: "Optional sync, coming soon",
+    description:
+      "Write without an account today. When sync arrives, you can opt in to take your library to another device.",
   },
 ];
 
@@ -67,6 +75,7 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <SyncAccountAction variant="landing-header" />
             <Link
               className="hidden rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
               href="/books"
@@ -102,7 +111,7 @@ export default function Home() {
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl">
                 Read, write, and shape your novel in one local-first workspace. Your manuscript
-                stays on your device while the tools you need remain one gesture away.
+                stays on your device, and optional multi-device sync is coming when you want it.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -119,6 +128,7 @@ export default function Home() {
                 >
                   See how it works
                 </a>
+                <SyncAccountAction variant="landing-hero" />
               </div>
 
               <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-muted-foreground">
@@ -128,7 +138,7 @@ export default function Home() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Check aria-hidden="true" className="size-4 text-primary" />
-                  Your words stay local
+                  No account required
                 </span>
               </div>
             </div>
@@ -161,7 +171,7 @@ export default function Home() {
         </section>
 
         <section className="border-y border-border bg-muted/50" id="features">
-          <div className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-16 sm:px-8 md:grid-cols-3 lg:px-12 lg:py-20">
+          <div className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-16 sm:px-8 md:grid-cols-2 lg:grid-cols-4 lg:px-12 lg:py-20">
             {features.map((feature) => (
               <article
                 className="rounded-[1.5rem] border border-border bg-card p-6 shadow-lg shadow-foreground/5 sm:p-7"
@@ -270,11 +280,11 @@ export default function Home() {
                   Free. Open. Yours.
                 </p>
                 <h2 className="mt-3 max-w-2xl font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Your manuscript belongs on your computer—not ours.
+                  Your manuscript starts on your computer—not ours.
                 </h2>
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-background/65 sm:text-base">
-                  Awthor is completely free and open source. The hosted app keeps your writing on
-                  your device and never stores your manuscript in an Awthor server database.
+                  Awthor is completely free and open source. You can write without an account, and
+                  optional sync will always be your choice when it arrives.
                 </p>
               </div>
               <Link
@@ -293,11 +303,11 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-3 text-sm font-bold text-background/80">
                 <HardDrive aria-hidden="true" className="size-4 text-background/70" />
-                Stored on your device
+                Local by default
               </div>
               <div className="flex items-center gap-3 text-sm font-bold text-background/80">
                 <ShieldCheck aria-hidden="true" className="size-4 text-background/70" />
-                No manuscript database
+                Optional sync, coming soon
               </div>
             </div>
           </div>
@@ -317,11 +327,11 @@ export default function Home() {
               </Link>
               <p className="mt-5 text-sm leading-6 text-muted-foreground">
                 A calm, completely free writing space for planning, drafting, and finishing your
-                novel—without giving your manuscript to the cloud.
+                novel—without needing an account or giving up control of your words.
               </p>
               <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-2 text-xs font-bold text-primary">
                 <HardDrive aria-hidden="true" className="size-3.5" />
-                Your words stay on your device
+                Local by default
               </div>
             </div>
 

@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { Geist_Mono, Newsreader, Nunito_Sans, Outfit } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { AuthProvider } from "@/components/auth-provider";
 import { BackupReminder } from "@/components/backup-reminder";
 import { ThemeProvider } from "@/components/theme-provider";
 import { WebMcpSiteTools } from "@/components/webmcp-site-tools";
+import { clerkConfiguration } from "@/lib/auth/config";
 import { themeBootstrapScript } from "@/lib/repository";
 import { cn } from "@/lib/utils";
 
@@ -100,11 +102,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </Script>
       </head>
       <body className="flex min-h-full flex-col">
-        <ThemeProvider>
-          {children}
-          <BackupReminder />
-          <WebMcpSiteTools />
-        </ThemeProvider>
+        <AuthProvider
+          enabled={clerkConfiguration.enabled}
+          publishableKey={clerkConfiguration.publishableKey}
+        >
+          <ThemeProvider>
+            {children}
+            <BackupReminder />
+            <WebMcpSiteTools />
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

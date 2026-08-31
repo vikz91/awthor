@@ -19,6 +19,7 @@ import { AppTopBar } from "@/components/app-top-bar";
 import { BookCover } from "@/components/book-cover";
 import { BrandMark } from "@/components/brand-mark";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { SyncAccountAction } from "@/components/sync-account-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -147,6 +148,13 @@ export function BooksLibrary() {
     setSettingsOpen(searchParams.get("settings") === "open");
   }, [searchParams]);
 
+  useEffect(() => {
+    if (searchParams.get("new") === "open") {
+      setEditingBook(null);
+      setBookDialogOpen(true);
+    }
+  }, [searchParams]);
+
   const filteredBooks = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     if (!normalizedQuery) {
@@ -195,6 +203,18 @@ export function BooksLibrary() {
   function openNewBook() {
     setEditingBook(null);
     setBookDialogOpen(true);
+  }
+
+  function updateBookDialogOpen(open: boolean) {
+    setBookDialogOpen(open);
+    if (open || searchParams.get("new") !== "open") {
+      return;
+    }
+
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("new");
+    const suffix = next.toString();
+    router.replace(suffix ? `${pathname}?${suffix}` : pathname, { scroll: false });
   }
 
   function openEditBook(book: Book) {
@@ -250,6 +270,7 @@ export function BooksLibrary() {
               <HardDrive aria-hidden="true" />
               Stored on this device
             </Badge>
+            <SyncAccountAction variant="library" />
             <Button
               aria-label="Author and app settings"
               onClick={() => updateSettingsQuery(true)}
@@ -274,7 +295,7 @@ export function BooksLibrary() {
             </h1>
             <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
               <HardDrive aria-hidden="true" className="size-3.5" />
-              Private to this browser
+              Local to this browser · Optional sync coming soon
             </p>
           </div>
           {loadState.status === "ready" && books.length > 0 && (
@@ -335,7 +356,7 @@ export function BooksLibrary() {
       <BookManagementDialog
         book={editingBook}
         defaultAuthor={profile?.authorName ?? ""}
-        onOpenChange={setBookDialogOpen}
+        onOpenChange={updateBookDialogOpen}
         onSaved={handleBookSaved}
         open={bookDialogOpen}
       />
