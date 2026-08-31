@@ -5,13 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useSync } from "@/components/sync-provider";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Publication = {
@@ -26,6 +26,7 @@ type PublishState = "idle" | "loading" | "publishing" | "unpublishing" | "error"
 export function BookPublish({ bookId }: { bookId: string }) {
   const { configured, signedIn, status: syncStatus, syncNow } = useSync();
   const [publication, setPublication] = useState<Publication | null>(null);
+  const [open, setOpen] = useState(false);
   const [state, setState] = useState<PublishState>("loading");
   const [message, setMessage] = useState("Checking publishing status…");
 
@@ -114,66 +115,70 @@ export function BookPublish({ bookId }: { bookId: string }) {
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label={`${label}. ${message}`}
-              className={cn(state === "error" && "text-destructive")}
-              disabled={working || syncStatus === "syncing"}
-              size="icon-sm"
-              title={message}
-              variant="ghost"
-            />
-          }
-        >
-          <Icon
-            aria-hidden="true"
-            className={cn(working && "animate-spin motion-reduce:animate-none")}
-          />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-72">
-          <DropdownMenuLabel>
-            {publication ? "Public story" : "Publish this story"}
-          </DropdownMenuLabel>
-          <p className="px-2 pb-2 text-xs leading-5 text-muted-foreground">{message}</p>
+      <Button
+        aria-label={`${label}. ${message}`}
+        className={cn(state === "error" && "text-destructive")}
+        disabled={working || syncStatus === "syncing"}
+        onClick={() => setOpen(true)}
+        size="icon-sm"
+        title={message}
+        variant="ghost"
+      >
+        <Icon
+          aria-hidden="true"
+          className={cn(working && "animate-spin motion-reduce:animate-none")}
+        />
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="gap-4 sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{publication ? "Public story" : "Publish this story"}</DialogTitle>
+            <DialogDescription>{message}</DialogDescription>
+          </DialogHeader>
           {publication ? (
-            <>
-              <p className="px-2 pb-2 text-xs text-muted-foreground">
-                Last published {formatDate(publication.updatedAt)}
-              </p>
-              <DropdownMenuItem
-                onClick={() => window.open(publication.url, "_blank", "noopener,noreferrer")}
-              >
-                <ExternalLink aria-hidden="true" /> Open public story
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={working} onClick={() => void publish()}>
-                <Send aria-hidden="true" /> Republish latest version
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={working}
-                onClick={() => void unpublish()}
-                variant="destructive"
-              >
-                <Trash2 aria-hidden="true" /> Turn off publishing
-              </DropdownMenuItem>
-            </>
-          ) : (
-            <DropdownMenuItem
-              disabled={working || !configured || !signedIn}
-              onClick={() => void publish()}
-            >
-              <Send aria-hidden="true" /> Publish public read-only page
-            </DropdownMenuItem>
-          )}
+            <p className="text-xs text-muted-foreground">
+              Last published {formatDate(publication.updatedAt)}
+            </p>
+          ) : null}
           {!configured || !signedIn ? (
-            <p className="px-2 pt-2 pb-1 text-xs leading-5 text-muted-foreground">
+            <p className="text-xs leading-5 text-muted-foreground">
               Sign in and select Sync before publishing. Nothing is uploaded until you do.
             </p>
           ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <DialogFooter>
+            {publication ? (
+              <>
+                <Button
+                  disabled={working}
+                  onClick={() => void unpublish()}
+                  type="button"
+                  variant="destructive"
+                >
+                  <Trash2 aria-hidden="true" /> Turn off publishing
+                </Button>
+                <Button disabled={working} onClick={() => void publish()} type="button">
+                  <Send aria-hidden="true" /> Republish
+                </Button>
+                <Button
+                  onClick={() => window.open(publication.url, "_blank", "noopener,noreferrer")}
+                  type="button"
+                  variant="outline"
+                >
+                  <ExternalLink aria-hidden="true" /> Open story
+                </Button>
+              </>
+            ) : (
+              <Button
+                disabled={working || !configured || !signedIn}
+                onClick={() => void publish()}
+                type="button"
+              >
+                <Send aria-hidden="true" /> Publish public page
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <p aria-live="polite" className="sr-only">
         {message}
       </p>
