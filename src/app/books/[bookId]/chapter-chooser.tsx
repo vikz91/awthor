@@ -128,7 +128,10 @@ export function ChapterChooser({
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 [scrollbar-gutter:stable] sm:px-4">
+        <div
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 [scrollbar-gutter:stable] sm:px-4"
+          data-awthor-scroll-region="chapter-list"
+        >
           {filteredChapters.length === 0 ? (
             <p className="px-3 py-12 text-center text-sm text-muted-foreground">
               No chapters match “{query}”.

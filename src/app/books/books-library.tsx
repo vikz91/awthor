@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { type Book, getAwthorRepository, type OnboardingDetails } from "@/lib/repository";
+import { readRepositoryChange, repositoryChangedEventName } from "@/lib/webmcp/workspace-bridge";
 import { BookManagementDialog, DeleteBookDialog } from "./book-management-dialog";
 
 const repository = getAwthorRepository();
@@ -129,6 +130,17 @@ export function BooksLibrary() {
 
   useEffect(() => {
     void loadLibrary();
+  }, [loadLibrary]);
+
+  useEffect(() => {
+    function handleRepositoryChanged(event: Event) {
+      if (readRepositoryChange(event)) {
+        void loadLibrary();
+      }
+    }
+
+    window.addEventListener(repositoryChangedEventName, handleRepositoryChanged);
+    return () => window.removeEventListener(repositoryChangedEventName, handleRepositoryChanged);
   }, [loadLibrary]);
 
   useEffect(() => {
