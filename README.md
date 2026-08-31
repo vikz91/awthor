@@ -192,6 +192,11 @@ That URL is not indexed or listed, but anyone who has it can read the published 
 Republishing refreshes the snapshot at the same URL; ordinary private edits do not alter it.
 `awthor_unpublish_book` disables the link without deleting the private synced book.
 
+Signed-in writers can also publish from an open book in Awthor. Publishing explicitly syncs that
+book, then creates the same unlisted, read-only snapshot. The public page shows the selected cover,
+author name, and author email from the writer's local profile. Writers can republish at the stable
+link or turn public access off at any time.
+
 #### Remote MCP setup
 
 Remote MCP is optional and requires the existing Clerk and MongoDB sync configuration, plus a

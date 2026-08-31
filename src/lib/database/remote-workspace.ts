@@ -533,6 +533,8 @@ export class RemoteWorkspaceService {
     const book = this.requireBook(workspace, bookId);
     const existing = await getPublishedStoryForBook(this.database, this.userId, bookId);
     const story = buildPublishedStory({
+      authorEmail: workspace.profile?.contactEmail ?? "",
+      authorName: book.author || workspace.profile?.authorName || "",
       book,
       chapters: workspace.chapters[bookId],
       existingPublishedAt: existing?.publishedAt,
@@ -542,6 +544,11 @@ export class RemoteWorkspaceService {
     });
     await ensurePublishedStoryIndexes(this.database);
     return savePublishedStory(this.database, story);
+  }
+  async getPublishedBook(bookId: string) {
+    const workspace = await this.workspace();
+    this.requireBook(workspace, bookId);
+    return getPublishedStoryForBook(this.database, this.userId, bookId);
   }
   async unpublishBook(bookId: string) {
     const w = await this.workspace();

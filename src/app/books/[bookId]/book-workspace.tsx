@@ -64,6 +64,7 @@ import {
 } from "@/lib/webmcp/workspace-bridge";
 import { BookExport } from "./book-export";
 import { BookFloatingToolbar } from "./book-floating-toolbar";
+import { BookPublish } from "./book-publish";
 import { ChapterChooser } from "./chapter-chooser";
 import { ChapterProgressRail } from "./chapter-progress-rail";
 import { FocusModeControls } from "./focus-mode-controls";
@@ -1793,6 +1794,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                   <span className="hidden xl:inline">Write</span>
                 </Button>
               </div>
+              <BookPublish bookId={book.id} />
               <BookExport snapshot={exportSnapshot} />
               <Button
                 aria-label="Enter focus mode"

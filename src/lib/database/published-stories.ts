@@ -10,8 +10,10 @@ import {
 export {
   buildPublishedStory,
   type PublishedStory,
+  type PublishedStorySummary,
   publicIdSchema,
   publishedStorySchema,
+  toPublishedStorySummary,
 } from "./published-story-snapshot";
 
 type StoredPublishedStory = PublishedStory;
