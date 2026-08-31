@@ -7,6 +7,7 @@ import { MarkdownManuscript } from "./markdown-manuscript";
 type PagedManuscriptProps = {
   chapterLabel: string;
   onPaginated?: () => void;
+  showTitle?: boolean;
   source: string;
   title: string;
 };
@@ -14,6 +15,7 @@ type PagedManuscriptProps = {
 export function PagedManuscript({
   chapterLabel,
   onPaginated,
+  showTitle = true,
   source,
   title,
 }: PagedManuscriptProps) {
@@ -77,7 +79,7 @@ export function PagedManuscript({
       return;
     }
 
-    if (!source && !title) {
+    if (!source && (!title || !showTitle)) {
       pageHost.replaceChildren();
       setPageCount(0);
       return;
@@ -119,7 +121,7 @@ export function PagedManuscript({
         image.removeEventListener("error", schedulePagination);
       }
     };
-  }, [paginate, source, title]);
+  }, [paginate, showTitle, source, title]);
 
   return (
     <div className="manuscript-page-stack">
@@ -130,7 +132,7 @@ export function PagedManuscript({
             data-pagination-source
             ref={sourceRef}
           >
-            <ChapterHeading chapterLabel={chapterLabel} title={title} />
+            <ChapterHeading chapterLabel={chapterLabel} showTitle={showTitle} title={title} />
             <MarkdownManuscript source={source} />
           </div>
         </div>
@@ -153,15 +155,25 @@ export function PagedManuscript({
   );
 }
 
-function ChapterHeading({ chapterLabel, title }: { chapterLabel: string; title: string }) {
+function ChapterHeading({
+  chapterLabel,
+  showTitle,
+  title,
+}: {
+  chapterLabel: string;
+  showTitle: boolean;
+  title: string;
+}) {
   return (
-    <header className="mb-10">
+    <header className={showTitle ? "mb-10" : "mb-6"}>
       <p className="font-sans text-xs font-semibold tracking-[0.24em] text-muted-foreground uppercase">
         {chapterLabel}
       </p>
-      <h1 className="manuscript-reader mt-5 font-serif text-4xl leading-tight font-medium tracking-[-0.035em] sm:text-5xl">
-        {title}
-      </h1>
+      {showTitle ? (
+        <h1 className="manuscript-reader mt-5 font-serif text-4xl leading-tight font-medium tracking-[-0.035em] sm:text-5xl">
+          {title}
+        </h1>
+      ) : null}
     </header>
   );
 }
