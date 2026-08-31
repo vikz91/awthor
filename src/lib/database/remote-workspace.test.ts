@@ -31,6 +31,7 @@ describe("remote workspace input and defaults", () => {
 
   test("reports an LWW-rejected write instead of treating it as saved", () => {
     const submitted = {
+      contentHash: "",
       deleted: false,
       deviceId: "remote-mcp",
       modifiedAt: "2026-08-31T00:00:00.000Z",

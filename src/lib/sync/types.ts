@@ -11,6 +11,11 @@ export const syncRecordTypes = [
 export type SyncRecordType = (typeof syncRecordTypes)[number];
 
 export const syncRecordSchema = z.object({
+  contentHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .or(z.literal(""))
+    .default(""),
   deleted: z.boolean(),
   deviceId: z.string().min(1).max(128),
   modifiedAt: z.string().datetime(),
@@ -19,6 +24,21 @@ export const syncRecordSchema = z.object({
   recordType: z.enum(syncRecordTypes),
 });
 export type SyncRecord = z.infer<typeof syncRecordSchema>;
+
+/** Device-local version metadata deliberately excludes manuscript payloads. */
+export const syncRecordStateSchema = z.object({
+  contentHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .or(z.literal(""))
+    .default(""),
+  deleted: z.boolean(),
+  deviceId: z.string().min(1).max(128),
+  modifiedAt: z.string().datetime(),
+  recordId: z.string().min(1).max(256),
+  recordType: z.enum(syncRecordTypes),
+});
+export type SyncRecordState = z.infer<typeof syncRecordStateSchema>;
 
 export const syncedRecordSchema = syncRecordSchema.extend({
   serverRevision: z.number().int().nonnegative(),
@@ -36,6 +56,7 @@ export const syncPushResponseSchema = z.object({
 
 export const syncPullResponseSchema = z.object({
   cursor: z.number().int().nonnegative(),
+  hasMore: z.boolean().default(false),
   records: syncedRecordSchema.array(),
 });
 
@@ -47,7 +68,7 @@ export type SyncDeviceState = {
   lastAttemptAt: string | null;
   lastError: string | null;
   lastSuccessfulSyncAt: string | null;
-  records: Record<string, SyncRecord>;
+  records: Record<string, SyncRecordState>;
 };
 
 export const syncDeviceStateSchema = z.object({
@@ -56,5 +77,5 @@ export const syncDeviceStateSchema = z.object({
   lastAttemptAt: z.string().datetime().nullable().default(null),
   lastError: z.string().nullable().default(null),
   lastSuccessfulSyncAt: z.string().datetime().nullable().default(null),
-  records: z.record(z.string(), syncRecordSchema).default({}),
+  records: z.record(z.string(), syncRecordStateSchema).default({}),
 });

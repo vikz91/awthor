@@ -29,8 +29,9 @@ books, profile details, settings, or manuscript content. Selecting **Sync** is t
 that copies the full writing workspace to the signed-in account for use on another device.
 
 After that first manual sync, Awthor keeps the workspace current in the background after a real
-local change, when the browser reconnects, or when a previously synced workspace is reopened. It
-does not poll or continuously push data. Sync is intentionally event-driven and remains optional.
+local change, when the browser reconnects, or when a previously synced workspace is reopened.
+Per-record SHA-256 fingerprints mean ordinary runs upload only changed records, not every chapter.
+It does not poll or continuously push data. Sync is intentionally event-driven and remains optional.
 
 There is no pricing tier. Awthor is completely free and distributed under the
 [GNU Affero General Public License v3.0](LICENSE).

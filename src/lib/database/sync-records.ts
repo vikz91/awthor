@@ -1,11 +1,13 @@
 import "server-only";
 
 import type { ClientSession, Collection, Db } from "mongodb";
-import { compareSyncRecords } from "@/lib/sync/records";
+import { compareSyncRecords, createSyncContentHash } from "@/lib/sync/records";
 import { type SyncedRecord, type SyncRecord, syncedRecordSchema } from "@/lib/sync/types";
 
 type StoredSyncRecord = SyncedRecord & { userId: string };
 type SyncCounter = { _id: "syncRecords"; value: number };
+
+const initializedDatabases = new Map<string, Promise<void>>();
 
 function collection(database: Db): Collection<StoredSyncRecord> {
   return database.collection<StoredSyncRecord>("syncRecords");
@@ -16,24 +18,40 @@ function counters(database: Db): Collection<SyncCounter> {
 }
 
 export async function ensureSyncIndexes(database: Db) {
-  await collection(database).createIndex(
-    { recordId: 1, recordType: 1, userId: 1 },
-    { name: "sync_record_owner", unique: true },
-  );
-  await collection(database).createIndex({ serverRevision: 1, userId: 1 }, { name: "sync_cursor" });
+  const cacheKey = database.databaseName;
+  const existing = initializedDatabases.get(cacheKey);
+  if (existing) return existing;
 
-  // Existing deployments used Date.now() directly. Seed the counter above any
-  // previously issued revision before allocating the first monotonic value.
-  const latest = await collection(database)
-    .find({}, { projection: { serverRevision: 1 } })
-    .sort({ serverRevision: -1 })
-    .limit(1)
-    .next();
-  await counters(database).updateOne(
-    { _id: "syncRecords" },
-    { $max: { value: Math.max(latest?.serverRevision ?? 0, Date.now() - 1) } },
-    { upsert: true },
-  );
+  const initialization = (async () => {
+    await collection(database).createIndex(
+      { userId: 1, recordType: 1, recordId: 1 },
+      { name: "sync_record_owner_v2", unique: true },
+    );
+    await collection(database).createIndex(
+      { userId: 1, serverRevision: 1 },
+      { name: "sync_cursor_v2" },
+    );
+
+    // Existing deployments used Date.now() directly. Seed the counter above any
+    // previously issued revision before allocating the first monotonic value.
+    const latest = await collection(database)
+      .find({}, { projection: { serverRevision: 1 } })
+      .sort({ serverRevision: -1 })
+      .limit(1)
+      .next();
+    await counters(database).updateOne(
+      { _id: "syncRecords" },
+      { $max: { value: Math.max(latest?.serverRevision ?? 0, Date.now() - 1) } },
+      { upsert: true },
+    );
+  })();
+  initializedDatabases.set(cacheKey, initialization);
+  try {
+    await initialization;
+  } catch (error) {
+    initializedDatabases.delete(cacheKey);
+    throw error;
+  }
 }
 
 /**
@@ -69,22 +87,26 @@ export async function pushSyncRecords(
   let cursor = 0;
 
   for (const record of records) {
+    const canonicalRecord = {
+      ...record,
+      contentHash: await createSyncContentHash(record.payload),
+    };
     const existing = await recordsCollection.findOne(
       {
-        recordId: record.recordId,
-        recordType: record.recordType,
+        recordId: canonicalRecord.recordId,
+        recordType: canonicalRecord.recordType,
         userId,
       },
       { session: options.session },
     );
-    const incomingWins = !existing || compareSyncRecords(record, existing) > 0;
+    const incomingWins = !existing || compareSyncRecords(canonicalRecord, existing) > 0;
     const winner = incomingWins
-      ? { ...record, serverRevision: await nextServerRevision(database, options.session) }
+      ? { ...canonicalRecord, serverRevision: await nextServerRevision(database, options.session) }
       : syncedRecordSchema.parse(existing);
 
     if (incomingWins) {
       await recordsCollection.updateOne(
-        { recordId: record.recordId, recordType: record.recordType, userId },
+        { recordId: canonicalRecord.recordId, recordType: canonicalRecord.recordType, userId },
         { $set: { ...winner, userId } },
         { session: options.session, upsert: true },
       );
@@ -104,6 +126,7 @@ export async function pullSyncRecords(database: Db, userId: string, cursor: numb
     .toArray();
   return {
     cursor: records.reduce((latest, record) => Math.max(latest, record.serverRevision), cursor),
+    hasMore: records.length === 1000,
     records: records.map((record) => syncedRecordSchema.parse(record)),
   };
 }

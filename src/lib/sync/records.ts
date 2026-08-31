@@ -7,14 +7,40 @@ import {
   type RepositoryData,
   themeSchema,
 } from "@/lib/repository";
-import type { SyncDeviceState, SyncedRecord, SyncRecord } from "./types";
+import type { SyncDeviceState, SyncedRecord, SyncRecord, SyncRecordState } from "./types";
 
 function recordKey(recordType: SyncRecord["recordType"], recordId: string) {
   return `${recordType}:${recordId}`;
 }
 
-function samePayload(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right);
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`)
+    .join(",")}}`;
+}
+
+/** A stable SHA-256 fingerprint used only for sync change detection. */
+export async function createSyncContentHash(payload: unknown): Promise<string> {
+  const data = new TextEncoder().encode(stableJson(payload));
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+function toState(record: Pick<SyncRecord, keyof SyncRecordState>): SyncRecordState {
+  return {
+    contentHash: record.contentHash,
+    deleted: record.deleted,
+    deviceId: record.deviceId,
+    modifiedAt: record.modifiedAt,
+    recordId: record.recordId,
+    recordType: record.recordType,
+  };
 }
 
 function currentRecords(data: RepositoryData) {
@@ -45,22 +71,32 @@ function currentRecords(data: RepositoryData) {
   return records;
 }
 
-/** Builds a complete local manifest and leaves deletion tombstones in device state. */
-export function createSyncSnapshot(data: RepositoryData, state: SyncDeviceState, now: string) {
+/**
+ * Builds only records changed since the previous successful snapshot. Device
+ * state retains lightweight versions and hashes, never duplicate manuscripts.
+ */
+export async function createSyncSnapshot(
+  data: RepositoryData,
+  state: SyncDeviceState,
+  now: string,
+) {
   const records = currentRecords(data);
   const currentKeys = new Set<string>();
   const nextState: SyncDeviceState = { ...state, records: { ...state.records } };
+  const changedRecords: SyncRecord[] = [];
 
   for (const record of records) {
     const key = recordKey(record.recordType, record.recordId);
     currentKeys.add(key);
     const existing = nextState.records[key];
-    if (!existing || existing.deleted || !samePayload(existing.payload, record.payload)) {
+    const contentHash = await createSyncContentHash(record.payload);
+    if (!existing || existing.deleted || existing.contentHash !== contentHash) {
       const sourceUpdatedAt =
         record.payload && typeof record.payload === "object" && "updatedAt" in record.payload
           ? (record.payload as { updatedAt?: unknown }).updatedAt
           : null;
-      nextState.records[key] = {
+      const changed: SyncRecord = {
+        contentHash,
         deleted: false,
         deviceId: state.deviceId,
         modifiedAt: typeof sourceUpdatedAt === "string" ? sourceUpdatedAt : now,
@@ -68,19 +104,34 @@ export function createSyncSnapshot(data: RepositoryData, state: SyncDeviceState,
         recordId: record.recordId,
         recordType: record.recordType,
       };
+      nextState.records[key] = toState(changed);
+      changedRecords.push(changed);
     }
   }
 
   for (const [key, existing] of Object.entries(nextState.records)) {
     if (!currentKeys.has(key) && !existing.deleted) {
-      nextState.records[key] = { ...existing, deleted: true, modifiedAt: now, payload: null };
+      const changed: SyncRecord = {
+        contentHash: await createSyncContentHash(null),
+        deleted: true,
+        deviceId: state.deviceId,
+        modifiedAt: now,
+        payload: null,
+        recordId: existing.recordId,
+        recordType: existing.recordType,
+      };
+      nextState.records[key] = toState(changed);
+      changedRecords.push(changed);
     }
   }
 
-  return { records: Object.values(nextState.records), state: nextState };
+  return { changedRecords, state: nextState };
 }
 
-export function compareSyncRecords(left: SyncRecord, right: SyncRecord) {
+export function compareSyncRecords(
+  left: Pick<SyncRecord, "deviceId" | "modifiedAt">,
+  right: Pick<SyncRecord, "deviceId" | "modifiedAt">,
+) {
   const dateOrder = left.modifiedAt.localeCompare(right.modifiedAt);
   if (dateOrder !== 0) return dateOrder;
   return left.deviceId.localeCompare(right.deviceId);
@@ -95,12 +146,22 @@ export function applySyncRecords(
   const next = structuredClone(data);
   const nextState: SyncDeviceState = { ...currentState, records: { ...currentState.records } };
   const books = new Map(next.books.map((book) => [book.id, book]));
+  let changed = false;
 
   for (const remote of canonicalRecords) {
     const key = recordKey(remote.recordType, remote.recordId);
     const local = nextState.records[key];
     if (local && compareSyncRecords(local, remote) > 0) continue;
-    nextState.records[key] = { ...remote };
+    nextState.records[key] = toState(remote);
+    if (
+      local &&
+      local.deleted === remote.deleted &&
+      local.contentHash !== "" &&
+      local.contentHash === remote.contentHash
+    ) {
+      continue;
+    }
+    changed = true;
 
     if (remote.recordType === "profile") {
       next.profile = remote.deleted ? null : onboardingDetailsSchema.parse(remote.payload);
@@ -147,5 +208,5 @@ export function applySyncRecords(
   next.books = [...books.values()];
   for (const values of Object.values(next.chapters))
     values.sort((left, right) => left.number - right.number);
-  return { data: next, state: nextState };
+  return { changed, data: next, state: nextState };
 }

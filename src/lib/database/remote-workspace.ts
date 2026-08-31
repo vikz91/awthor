@@ -127,6 +127,7 @@ function makeRecord(
   deleted = false,
 ): SyncRecord {
   return {
+    contentHash: "",
     deleted,
     deviceId: remoteDeviceId,
     modifiedAt: now(),
