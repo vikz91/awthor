@@ -54,7 +54,7 @@ const features = [
     icon: Cloud,
     title: "Optional sync",
     description:
-      "Write without an account today. When you are ready, sync your library to another device.",
+      "Write without an account. When you choose Sync, your signed-in library is ready on another device.",
   },
 ];
 
@@ -325,10 +325,10 @@ export default function Home() {
               </article>
               <article className="rounded-2xl border border-border bg-muted/40 p-5">
                 <Code2 aria-hidden="true" className="size-5 text-primary" />
-                <h3 className="mt-4 font-heading text-lg font-semibold">AI-ready, still local</h3>
+                <h3 className="mt-4 font-heading text-lg font-semibold">AI tools, on your terms</h3>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Compatible AI browsers can use page-scoped WebMCP tools for supported book and
-                  chapter actions.
+                  Compatible AI browsers can use local page tools; authorized MCP clients can work
+                  with the books you have chosen to sync.
                 </p>
               </article>
             </div>

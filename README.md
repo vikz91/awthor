@@ -18,10 +18,11 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-4D7C0F?logo=gnu&logoColor=white)](LICENSE)
 ![Storage](https://img.shields.io/badge/Manuscript_Storage-Your_Device-5F6B4E)
 
-Awthor is a deliberately minimal writing workspace. The hosted application does not store
-manuscripts in an Awthor server database: books, chapters, characters, settings, and reading
-positions remain in the current browser. IndexedDB stores book-domain records while localStorage
-is limited to small bootstrap and global-preference values.
+Awthor is a deliberately minimal writing workspace. Books, chapters, characters, settings, and
+reading positions stay in the current browser by default. IndexedDB stores book-domain records
+while localStorage is limited to small bootstrap and global-preference values. An authenticated
+writer can explicitly choose Sync to copy that workspace to their private MongoDB account for
+multi-device access or remote MCP use.
 
 Awthor is local-first by default: no account is required to write. Signing in does not upload any
 books, profile details, settings, or manuscript content. Selecting **Sync** is the explicit action
@@ -171,13 +172,44 @@ Awthor schedules background sync only for a meaningful local mutation, browser r
 one refresh when reopening an already-synced workspace—never on a timer. The visible Sync control
 always provides the current status and last successful sync time, and can be used to retry.
 
+### Private remote MCP and unlisted stories
+
+When Clerk and MongoDB are configured, Awthor also exposes an authenticated remote MCP endpoint at
+`/api/mcp`. It reads and writes only the workspace already synced to the authenticated Clerk user;
+it cannot access a browser's IndexedDB directly. Remote tools include books, chapters, characters,
+chapter arcs, author/workspace settings, portable export/import, and publishing controls. Requests
+or results containing Markdown, character dossiers, or full backups are sent to the connected MCP
+client, so connect only an AI client you trust.
+
+Remote MCP authorization uses Clerk OAuth scopes: `awthor.read`, `awthor.write`, and
+`awthor.publish`. ChatGPT/custom-MCP availability depends on the user plan and workspace having
+custom MCP apps enabled; the endpoint remains compatible with other standards-based MCP clients.
+OAuth consent is the write authorization boundary—no extra confirmation flags are required by the
+server, though an MCP client may still ask for approval before a tool call.
+
+`awthor_publish_book` creates or refreshes an unlisted public reader URL at `/stories/[publicId]`.
+That URL is not indexed or listed, but anyone who has it can read the published snapshot.
+Republishing refreshes the snapshot at the same URL; ordinary private edits do not alter it.
+`awthor_unpublish_book` disables the link without deleting the private synced book.
+
+#### Remote MCP setup
+
+Remote MCP is optional and requires the existing Clerk and MongoDB sync configuration, plus a
+Clerk OAuth application/resource configured for the deployed `/api/mcp` URL. Give the OAuth client
+the `awthor.read`, `awthor.write`, and `awthor.publish` scopes, then set
+`CLERK_OAUTH_AUTHORIZATION_SERVER_URL` to Clerk's OAuth issuer. Set
+`MCP_ALLOWED_ORIGINS` only for additional browser-based MCP clients; native MCP clients use the
+OAuth Bearer flow. Deployments without this configuration keep remote MCP disabled while local
+writing, Sync, and page-local WebMCP continue to work.
+
 ## WebMCP Site Tools
 
 Awthor exposes a deliberately narrow set of local [WebMCP Site
 Tools](https://learn.chatgpt.com/docs/webmcp) when it is opened in a compatible top-level AI
-browser. There is no MCP server, API key, Awthor account, or remote data bridge: the tools execute
-inside the open page and reuse `AwthorRepository` against that browser's IndexedDB data. Ordinary
-browsers feature-detect the API and continue without registering anything.
+browser. WebMCP is separate from the authenticated remote MCP server: page tools execute inside the
+open page and reuse `AwthorRepository` against that browser's IndexedDB data. They need no account,
+API key, or cloud workspace. Ordinary browsers feature-detect the API and continue without
+registering anything.
 
 ### Using Awthor with ChatGPT
 
@@ -194,8 +226,8 @@ browser data are separate. Export and import a backup when moving between them.
 
 WebMCP is page-scoped browser integration, not a direct MCP connection. Regular ChatGPT on the web
 or mobile cannot invoke these site tools, and neither ChatGPT Work nor Codex can use them after the
-Awthor page is closed or navigated away. A standalone local MCP server would be needed for that
-different, page-independent workflow.
+Awthor page is closed or navigated away. For page-independent, account-backed workflows, use the
+authenticated remote MCP endpoint instead.
 
 The registered tools can:
 
@@ -245,6 +277,7 @@ states so both themes retain the same layout and accessible interaction states.
 | Optional accounts | [Clerk](https://clerk.com/) | Email-code identity and opt-in sync ownership |
 | Sync storage | [MongoDB Node.js Driver](https://www.mongodb.com/docs/drivers/node/current/) | Server-only, account-scoped multi-device workspace records |
 | AI browser tools | [WebMCP Site Tools](https://learn.chatgpt.com/docs/webmcp) | Feature-detected local book, chapter, backup, navigation, and scroll actions |
+| Remote AI tools | [Model Context Protocol](https://modelcontextprotocol.io/) | Clerk OAuth-protected cloud workspace, publishing, and full authoring tools |
 | Validation | [Zod 4](https://zod.dev/) | Runtime validation and backup/migration parsing |
 | Backup archives | [`fflate`](https://github.com/101arrowz/fflate) | Client-only ZIP creation and extraction for portable local backups |
 | Icons | [Lucide React](https://lucide.dev/) + [Motion Icons](https://www.npmjs.com/package/motion-icons-react) | Interface iconography |
@@ -313,6 +346,7 @@ src/
     ├── repository/           # Product contract, IndexedDB v3, migration, autosave, and seed data
     ├── sync/                 # Client sync metadata, record reconciliation, and sync transport
     ├── database/             # Server-only MongoDB connection and account-scoped sync records
+    ├── mcp/                  # OAuth-scoped remote MCP tool registry
     └── webmcp/               # Site-tool schemas, registration lifecycle, and workspace bridge
 ```
 
