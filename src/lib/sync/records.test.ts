@@ -62,4 +62,31 @@ describe("sync records", () => {
     expect(result.data.settings.editor.fontSize).toBe(20);
     expect(result.data.settings.backupReminder).toEqual(data.settings.backupReminder);
   });
+
+  test("repairs duplicate chapter numbers from merged workspaces before local persistence", () => {
+    const data = createSeedRepositoryData();
+    const bookId = data.books[0].id;
+    const [first, second, third] = data.chapters[bookId];
+    const state = createSyncDeviceState("device-a");
+    const result = applySyncRecords(data, state, [
+      {
+        contentHash: "b".repeat(64),
+        deleted: false,
+        deviceId: "device-b",
+        modifiedAt: "2027-01-01T00:00:00.000Z",
+        payload: { ...second, bookId, number: 1 },
+        recordId: `${bookId}:${second.id}`,
+        recordType: "chapter",
+        serverRevision: 1,
+      },
+    ]);
+
+    expect(result.changed).toBe(true);
+    expect(result.data.chapters[bookId].map((chapter) => chapter.number)).toEqual([1, 2, 3]);
+    expect(result.data.chapters[bookId].map((chapter) => chapter.id)).toEqual([
+      first.id,
+      second.id,
+      third.id,
+    ]);
+  });
 });

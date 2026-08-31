@@ -72,6 +72,35 @@ function currentRecords(data: RepositoryData) {
 }
 
 /**
+ * IndexedDB keeps chapter order unique per book. Concurrent chapter creation
+ * can legitimately produce the same number in independent local workspaces,
+ * so repair the merged order before it reaches the local database. The changed
+ * chapters retain a fresh timestamp and are sent back as the next canonical
+ * sync delta.
+ */
+function normalizeChapterNumbers(chaptersByBook: RepositoryData["chapters"]): boolean {
+  let changed = false;
+  const normalizedAt = new Date().toISOString();
+
+  for (const chapters of Object.values(chaptersByBook)) {
+    chapters.sort(
+      (left, right) =>
+        left.number - right.number ||
+        left.updatedAt.localeCompare(right.updatedAt) ||
+        left.id.localeCompare(right.id),
+    );
+    for (const [index, chapter] of chapters.entries()) {
+      const number = index + 1;
+      if (chapter.number === number) continue;
+      chapters[index] = chapterSchema.parse({ ...chapter, number, updatedAt: normalizedAt });
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+/**
  * Builds only records changed since the previous successful snapshot. Device
  * state retains lightweight versions and hashes, never duplicate manuscripts.
  */
@@ -206,7 +235,6 @@ export function applySyncRecords(
   }
 
   next.books = [...books.values()];
-  for (const values of Object.values(next.chapters))
-    values.sort((left, right) => left.number - right.number);
+  changed = normalizeChapterNumbers(next.chapters) || changed;
   return { changed, data: next, state: nextState };
 }
