@@ -19,7 +19,8 @@ import { AppTopBar } from "@/components/app-top-bar";
 import { BookCover } from "@/components/book-cover";
 import { BrandMark } from "@/components/brand-mark";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { SyncAccountAction } from "@/components/sync-account-action";
+import { AccountMenu } from "@/components/sync-account-action";
+import { SyncControl } from "@/components/sync-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -270,7 +271,8 @@ export function BooksLibrary() {
               <HardDrive aria-hidden="true" />
               Stored on this device
             </Badge>
-            <SyncAccountAction variant="library" />
+            <SyncControl variant="navbar" />
+            <AccountMenu />
             <Button
               aria-label="Author and app settings"
               onClick={() => updateSettingsQuery(true)}
@@ -295,7 +297,7 @@ export function BooksLibrary() {
             </h1>
             <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
               <HardDrive aria-hidden="true" className="size-3.5" />
-              Local to this browser · Optional sync coming soon
+              Local to this browser · Sync when you choose
             </p>
           </div>
           {loadState.status === "ready" && books.length > 0 && (

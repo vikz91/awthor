@@ -2,7 +2,6 @@
 
 import { AlertCircle, BookDown, Check, Clipboard, FileDown, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,30 +11,21 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  type BookExportSnapshot,
-  createBookMarkdown,
-  createPdfDocumentTitle,
-} from "@/lib/book-export";
-import { withoutLeadingMarkdownTitle } from "@/lib/markdown";
+import { type BookExportSnapshot, createBookMarkdown, createPdfFilename } from "@/lib/book-export";
 import { cn } from "@/lib/utils";
-import { MarkdownManuscript } from "./markdown-manuscript";
 
 type BookExportProps = {
   snapshot: BookExportSnapshot;
 };
 
-type ExportState = "idle" | "working" | "copied" | "downloaded" | "print-ready" | "error";
+type ExportState = "idle" | "working" | "copied" | "downloaded" | "error";
 
 export function BookExport({ snapshot }: BookExportProps) {
-  const [mounted, setMounted] = useState(false);
-  const [printSnapshot, setPrintSnapshot] = useState<BookExportSnapshot | null>(null);
   const [state, setState] = useState<ExportState>("idle");
   const [message, setMessage] = useState("Export book");
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setMounted(true);
     return () => {
       if (resetTimerRef.current) {
         clearTimeout(resetTimerRef.current);
@@ -69,20 +59,14 @@ export function BookExport({ snapshot }: BookExportProps) {
   }
 
   async function exportPdf() {
-    announce("working", "Preparing the print layout…", false);
-    setPrintSnapshot(snapshot);
-    await nextPaint();
-    await waitForPrintImages();
-    const previousTitle = document.title;
-    document.title = createPdfDocumentTitle(snapshot.book);
+    announce("working", "Building your PDF…", false);
     try {
-      window.print();
-      announce("print-ready", "Print dialog opened. Choose Save as PDF.");
+      const { createBookPdf } = await import("@/lib/book-pdf");
+      const document = await createBookPdf(snapshot);
+      downloadFile(document, createPdfFilename(snapshot.book), "application/pdf");
+      announce("downloaded", "PDF downloaded.");
     } catch {
-      announce("error", "The print dialog could not be opened.");
-    } finally {
-      document.title = previousTitle;
-      setPrintSnapshot(null);
+      announce("error", "The PDF could not be created.");
     }
   }
 
@@ -101,7 +85,7 @@ export function BookExport({ snapshot }: BookExportProps) {
   const StatusIcon =
     state === "working"
       ? LoaderCircle
-      : state === "copied" || state === "downloaded" || state === "print-ready"
+      : state === "copied" || state === "downloaded"
         ? Check
         : state === "error"
           ? AlertCircle
@@ -134,7 +118,9 @@ export function BookExport({ snapshot }: BookExportProps) {
               <FileDown aria-hidden="true" />
               <span className="flex min-w-0 flex-col">
                 <span>Export as PDF</span>
-                <span className="text-xs text-muted-foreground">Open the local print dialog</span>
+                <span className="text-xs text-muted-foreground">
+                  Download a PDF for reading or sharing
+                </span>
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => void exportEpub()}>
@@ -158,60 +144,20 @@ export function BookExport({ snapshot }: BookExportProps) {
       <p aria-live="polite" className="sr-only">
         {message}
       </p>
-
-      {mounted && printSnapshot
-        ? createPortal(<PrintableBook snapshot={printSnapshot} />, document.body)
-        : null}
     </>
   );
 }
 
-function PrintableBook({ snapshot: { book, chapters } }: { snapshot: BookExportSnapshot }) {
-  const series =
-    book.isPartOfSeries && book.seriesName.trim()
-      ? `${book.seriesName}${book.seriesPosition ? ` · Book ${book.seriesPosition}` : ""}`
-      : null;
-
-  return (
-    <main aria-hidden="true" className="book-print-export" data-book-print-export>
-      <section className="book-print-title-page">
-        {series ? <p className="book-print-series">{series}</p> : null}
-        <h1>{book.title}</h1>
-        {book.subtitle.trim() ? <p className="book-print-subtitle">{book.subtitle}</p> : null}
-        {book.author.trim() ? <p className="book-print-author">By {book.author}</p> : null}
-      </section>
-
-      {book.preface.trim() ? (
-        <article className="book-print-section book-print-preface">
-          <h2>Preface</h2>
-          <div className="book-print-markdown">
-            <MarkdownManuscript imageLoading="eager" source={book.preface} />
-          </div>
-        </article>
-      ) : null}
-
-      {chapters.map((chapter) => (
-        <article className="book-print-section book-print-chapter" key={chapter.id}>
-          <header>
-            <p>Chapter {chapter.number}</p>
-            <h2>{chapter.title}</h2>
-          </header>
-          <div className="book-print-markdown">
-            <MarkdownManuscript
-              imageLoading="eager"
-              source={withoutLeadingMarkdownTitle(chapter.body)}
-            />
-          </div>
-        </article>
-      ))}
-    </main>
-  );
-}
-
-function downloadFile(contents: Uint8Array, filename: string, type: string) {
-  const bytes = new Uint8Array(contents.byteLength);
-  bytes.set(contents);
-  const url = URL.createObjectURL(new Blob([bytes.buffer], { type }));
+function downloadFile(contents: Blob | Uint8Array, filename: string, type: string) {
+  let file: Blob;
+  if (contents instanceof Uint8Array) {
+    const bytes = new Uint8Array(contents.byteLength);
+    bytes.set(contents);
+    file = new Blob([bytes.buffer], { type });
+  } else {
+    file = contents;
+  }
+  const url = URL.createObjectURL(file);
   const anchor = document.createElement("a");
   anchor.download = filename;
   anchor.href = url;
@@ -247,32 +193,4 @@ async function copyText(text: string) {
   if (!copied) {
     throw new Error("Clipboard access was blocked.");
   }
-}
-
-function nextPaint(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
-}
-
-async function waitForPrintImages() {
-  const images = Array.from(
-    document.querySelectorAll<HTMLImageElement>("[data-book-print-export] img"),
-  ).filter((image) => !image.complete);
-  if (images.length === 0) {
-    return;
-  }
-
-  await Promise.race([
-    Promise.all(
-      images.map(
-        (image) =>
-          new Promise<void>((resolve) => {
-            image.addEventListener("load", () => resolve(), { once: true });
-            image.addEventListener("error", () => resolve(), { once: true });
-          }),
-      ),
-    ),
-    new Promise<void>((resolve) => setTimeout(resolve, 1800)),
-  ]);
 }

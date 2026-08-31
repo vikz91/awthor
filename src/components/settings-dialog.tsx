@@ -3,6 +3,7 @@
 import { HardDrive, LoaderCircle, Moon, Sun } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { ProofreadingDialectSelect } from "@/components/proofreading-dialect-select";
+import { SyncControl } from "@/components/sync-control";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -229,9 +230,12 @@ function SettingsSurface({ onSaved, open, onOpenChange, presentation }: Settings
         </div>
       </fieldset>
 
+      <SyncControl variant="settings" />
+
       <div className="flex items-start gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs leading-5 text-muted-foreground">
         <HardDrive aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-        Awthor stores this profile and your manuscripts in this browser, not on an Awthor server.
+        Awthor stays local until you explicitly sync. Afterward, edits can follow your signed-in
+        account between devices.
       </div>
 
       {error && (
@@ -259,8 +263,8 @@ function SettingsSurface({ onSaved, open, onOpenChange, presentation }: Settings
         <DrawerHeader>
           <DrawerTitle>Settings</DrawerTitle>
           <DrawerDescription>
-            Your author profile, proofreading language, and reading theme. These details stay on
-            this device.
+            Your author profile, proofreading language, and reading theme. These stay local until
+            you choose to sync.
           </DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="@container px-4 py-5 sm:px-6">
@@ -279,8 +283,8 @@ function SettingsSurface({ onSaved, open, onOpenChange, presentation }: Settings
         <DialogHeader>
           <DialogTitle className="text-xl">Settings</DialogTitle>
           <DialogDescription>
-            A compact author profile, proofreading language, and reading theme. These details stay
-            on this device.
+            A compact author profile, proofreading language, and reading theme. These stay local
+            until you choose to sync.
           </DialogDescription>
         </DialogHeader>
         {editor}

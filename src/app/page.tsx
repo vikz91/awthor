@@ -5,11 +5,14 @@ import {
   Cloud,
   Code2,
   ExternalLink,
+  FileDown,
   Focus,
   HardDrive,
   MoonStar,
+  PenLine,
   ShieldCheck,
   Sparkles,
+  SpellCheck2,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -18,28 +21,40 @@ import { SyncAccountAction } from "@/components/sync-account-action";
 
 const features = [
   {
-    icon: Focus,
-    title: "A focused writing room",
+    icon: PenLine,
+    title: "One uninterrupted workspace",
     description:
-      "Read and write in one calm manuscript view, with no dashboards or page changes in the way.",
+      "Read, write, format, and focus in the same manuscript view—without navigating away from your chapter.",
   },
   {
     icon: BookOpenText,
-    title: "Your whole story, organized",
+    title: "A story bible when you need it",
     description:
-      "Move from book to chapter without losing the thread. Everything stays tidy as the story grows.",
+      "Keep characters and chapter arcs close at hand in quiet drawers that never interrupt the draft.",
+  },
+  {
+    icon: SpellCheck2,
+    title: "Proofread privately",
+    description:
+      "Run spelling, grammar, and style checks on-device with Harper.js—your manuscript is never sent away.",
+  },
+  {
+    icon: FileDown,
+    title: "Keep every exit open",
+    description:
+      "Write portable Markdown, download a complete PDF, copy your manuscript, and make local ZIP backups.",
   },
   {
     icon: MoonStar,
-    title: "Comfortable in any light",
+    title: "Made for long sessions",
     description:
-      "Choose warm Paper or low-glare Stone for a comfortable writing space at any hour.",
+      "Choose warm Paper or low-glare Stone, then switch between seamless and page layouts as you write.",
   },
   {
     icon: Cloud,
-    title: "Optional sync, coming soon",
+    title: "Optional sync",
     description:
-      "Write without an account today. When sync arrives, you can opt in to take your library to another device.",
+      "Write without an account today. When you are ready, sync your library to another device.",
   },
 ];
 
@@ -110,8 +125,8 @@ export default function Home() {
                 Your story deserves a quieter place.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl">
-                Read, write, and shape your novel in one local-first workspace. Your manuscript
-                stays on your device, and optional multi-device sync is coming when you want it.
+                A calm, capable workspace for drafting a novel. Your books live on your device by
+                default; optional sync is there when you want your library on another device.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -150,16 +165,16 @@ export default function Home() {
               />
               <figure className="overflow-hidden rounded-[1.7rem] border border-border bg-card shadow-2xl shadow-foreground/10">
                 <Image
-                  alt="Awthor in Stone theme showing a novel chapter beside the Characters story bible"
+                  alt="Awthor Read mode displaying a chapter from a novel"
                   className="h-auto w-full"
                   height={1024}
                   priority
                   sizes="(min-width: 1024px) 56vw, 100vw"
-                  src="/screenshots/awthor-story-workspace.jpg"
+                  src="/screenshots/awthor-read-mode.jpg"
                   width={1536}
                 />
                 <figcaption className="flex items-center justify-between gap-4 border-t border-border bg-card px-5 py-4 text-xs font-semibold text-muted-foreground">
-                  <span>Read mode · Characters open in place</span>
+                  <span>Read mode · One continuous manuscript</span>
                   <span className="inline-flex shrink-0 items-center gap-1.5 text-foreground">
                     <HardDrive aria-hidden="true" className="size-3.5" />
                     Saved locally
@@ -171,7 +186,7 @@ export default function Home() {
         </section>
 
         <section className="border-y border-border bg-muted/50" id="features">
-          <div className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-16 sm:px-8 md:grid-cols-2 lg:grid-cols-4 lg:px-12 lg:py-20">
+          <div className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-16 sm:px-8 md:grid-cols-2 lg:grid-cols-3 lg:px-12 lg:py-20">
             {features.map((feature) => (
               <article
                 className="rounded-[1.5rem] border border-border bg-card p-6 shadow-lg shadow-foreground/5 sm:p-7"
@@ -208,42 +223,115 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="mt-12 grid gap-6 lg:grid-cols-2">
+          <div className="mt-12 grid gap-6 lg:grid-cols-3">
             <figure className="overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-xl shadow-foreground/5">
               <Image
-                alt="Awthor Paper theme library with two locally stored novels"
+                alt="Awthor library showing locally stored books"
                 className="aspect-[3/2] w-full object-cover object-top"
                 height={1024}
-                sizes="(min-width: 1024px) 50vw, 100vw"
-                src="/screenshots/awthor-library.jpg"
+                sizes="(min-width: 1024px) 34vw, 100vw"
+                src="/screenshots/awthor-library-current.jpg"
                 width={1536}
               />
               <figcaption className="border-t border-border px-6 py-5">
                 <p className="font-heading text-lg font-semibold tracking-tight">A quiet library</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Search, create, and open books stored privately in this browser.
+                  Search, create, sync when you choose, and open books stored privately in this
+                  browser.
                 </p>
               </figcaption>
             </figure>
 
             <figure className="overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-xl shadow-foreground/5">
               <Image
-                alt="Awthor Stone theme writing mode showing a Markdown chapter editor"
+                alt="Awthor local spell check drawer beside a Markdown chapter editor"
                 className="aspect-[3/2] w-full object-cover object-top"
                 height={1024}
-                sizes="(min-width: 1024px) 50vw, 100vw"
-                src="/screenshots/awthor-writing.jpg"
+                sizes="(min-width: 1024px) 34vw, 100vw"
+                src="/screenshots/awthor-spell-check.jpg"
                 width={1536}
               />
               <figcaption className="border-t border-border px-6 py-5">
                 <p className="font-heading text-lg font-semibold tracking-tight">
-                  Read and write, seamlessly
+                  Spell check, kept local
                 </p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Switch modes in place and keep the manuscript in portable Markdown.
+                  Get useful writing feedback in a drawer without uploading your manuscript.
                 </p>
               </figcaption>
             </figure>
+
+            <figure className="overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-xl shadow-foreground/5">
+              <Image
+                alt="Awthor chapter chooser with searchable, reorderable chapters"
+                className="aspect-[3/2] w-full object-cover object-top"
+                height={1024}
+                sizes="(min-width: 1024px) 34vw, 100vw"
+                src="/screenshots/awthor-chapter-chooser.jpg"
+                width={1536}
+              />
+              <figcaption className="border-t border-border px-6 py-5">
+                <p className="font-heading text-lg font-semibold tracking-tight">
+                  Structure without the sprawl
+                </p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Search, add, rename, reorder, and open chapters without leaving the book.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-28">
+          <div className="grid gap-10 rounded-[2rem] border border-border bg-card p-7 shadow-xl shadow-foreground/5 sm:p-10 lg:grid-cols-[0.78fr_1.22fr] lg:items-center lg:p-14">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+                Small tools, right on time
+              </p>
+              <h2 className="mt-4 text-balance font-heading text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
+                The page stays clear until you need more.
+              </h2>
+              <p className="mt-5 max-w-xl text-lg leading-8 text-muted-foreground">
+                A discreet bottom tool bar reveals spell check, characters, chapter arc, and live
+                counts. Select text to format it in place. The rest of the time, it&apos;s just you
+                and the chapter.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <article className="rounded-2xl border border-border bg-muted/40 p-5">
+                <Focus aria-hidden="true" className="size-5 text-primary" />
+                <h3 className="mt-4 font-heading text-lg font-semibold">Focus without friction</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Enter a distraction-free reading or writing space, then leave exactly where you
+                  were.
+                </p>
+              </article>
+              <article className="rounded-2xl border border-border bg-muted/40 p-5">
+                <HardDrive aria-hidden="true" className="size-5 text-primary" />
+                <h3 className="mt-4 font-heading text-lg font-semibold">Backups you control</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Export a portable ZIP whenever you want, with a gentle weekly reminder to keep a
+                  copy.
+                </p>
+              </article>
+              <article className="rounded-2xl border border-border bg-muted/40 p-5">
+                <Cloud aria-hidden="true" className="size-5 text-primary" />
+                <h3 className="mt-4 font-heading text-lg font-semibold">Sync on your terms</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Sign in only if you want multi-device access. Your first explicit Sync is the
+                  moment anything leaves this device.
+                </p>
+              </article>
+              <article className="rounded-2xl border border-border bg-muted/40 p-5">
+                <Code2 aria-hidden="true" className="size-5 text-primary" />
+                <h3 className="mt-4 font-heading text-lg font-semibold">AI-ready, still local</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Compatible AI browsers can use page-scoped WebMCP tools for supported book and
+                  chapter actions.
+                </p>
+              </article>
+            </div>
           </div>
         </section>
 
@@ -284,7 +372,7 @@ export default function Home() {
                 </h2>
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-background/65 sm:text-base">
                   Awthor is completely free and open source. You can write without an account, and
-                  optional sync will always be your choice when it arrives.
+                  optional sync remains your choice whenever you need another device.
                 </p>
               </div>
               <Link
@@ -307,7 +395,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-3 text-sm font-bold text-background/80">
                 <ShieldCheck aria-hidden="true" className="size-4 text-background/70" />
-                Optional sync, coming soon
+                Optional sync
               </div>
             </div>
           </div>

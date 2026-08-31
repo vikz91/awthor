@@ -4,6 +4,7 @@ import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
 import { Cloud, CloudCheck, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSyncAccountConfigured } from "@/components/auth-provider";
+import { useSync } from "@/components/sync-provider";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +26,23 @@ const accountMenuItems = [
   { href: "/books?new=open", label: "New book" },
   { href: "/books", label: "Your library" },
 ];
+
+export function AccountMenu() {
+  const configured = useSyncAccountConfigured();
+  return configured ? <ConfiguredAccountMenu /> : null;
+}
+
+function ConfiguredAccountMenu() {
+  const { isSignedIn } = useUser();
+  return (
+    isSignedIn && (
+      <UserButton
+        appearance={{ elements: { avatarBox: "size-8" } }}
+        customMenuItems={accountMenuItems}
+      />
+    )
+  );
+}
 
 type SyncAccountActionProps = {
   variant: "landing-header" | "landing-hero" | "library";
@@ -55,6 +73,7 @@ function LocalOnlyAction({ variant }: SyncAccountActionProps) {
 function ConfiguredSyncAccountAction({ variant }: SyncAccountActionProps) {
   const [open, setOpen] = useState(false);
   const { isLoaded, isSignedIn, user } = useUser();
+  const { status, syncNow } = useSync();
   const clerkEmail = user?.primaryEmailAddress?.emailAddress;
 
   useEffect(() => {
@@ -91,20 +110,28 @@ function ConfiguredSyncAccountAction({ variant }: SyncAccountActionProps) {
     signedIn: Boolean(isSignedIn),
   });
 
+  async function handleAction() {
+    if (!isSignedIn) {
+      setOpen(true);
+      return;
+    }
+
+    try {
+      await syncNow();
+    } catch {
+      setOpen(true);
+    }
+  }
+
   return (
     <>
       <ActionTrigger
-        loading={!isLoaded}
-        onClick={() => setOpen(true)}
+        loading={!isLoaded || status === "syncing"}
+        onClick={() => void handleAction()}
         presentation={presentation}
         variant={variant}
       />
-      {isSignedIn && variant === "library" && (
-        <UserButton
-          appearance={{ elements: { avatarBox: "size-8" } }}
-          customMenuItems={accountMenuItems}
-        />
-      )}
+      {isSignedIn && variant === "library" && <AccountMenu />}
       <SyncAccountDialog
         configured
         onOpenChange={setOpen}
@@ -126,7 +153,7 @@ type ActionTriggerProps = {
 function ActionTrigger({ loading = false, onClick, presentation, variant }: ActionTriggerProps) {
   const isHero = variant === "landing-hero";
   const isLibrary = variant === "library";
-  const Icon = presentation.statusLabel === "Account ready" ? CloudCheck : Cloud;
+  const Icon = presentation.statusLabel === "Ready to sync" ? CloudCheck : Cloud;
 
   return (
     <Button
@@ -170,7 +197,8 @@ function SyncAccountDialog({
           <DialogDescription>{presentation.detail}</DialogDescription>
         </DialogHeader>
         <div className="rounded-xl border border-border bg-muted/60 px-3 py-3 text-sm leading-6 text-muted-foreground">
-          Your manuscript, author profile, and settings are not uploaded in this release.
+          Signing in alone never uploads your writing. Selecting Sync copies your manuscript, author
+          profile, and settings while keeping the local copy on this device.
         </div>
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} type="button" variant="outline">

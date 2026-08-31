@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { BackupReminder } from "@/components/backup-reminder";
+import { SyncProvider } from "@/components/sync-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { WebMcpSiteTools } from "@/components/webmcp-site-tools";
 import { clerkConfiguration } from "@/lib/auth/config";
@@ -107,9 +108,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           publishableKey={clerkConfiguration.publishableKey}
         >
           <ThemeProvider>
-            {children}
-            <BackupReminder />
-            <WebMcpSiteTools />
+            <SyncProvider>
+              {children}
+              <BackupReminder />
+              <WebMcpSiteTools />
+            </SyncProvider>
           </ThemeProvider>
         </AuthProvider>
       </body>

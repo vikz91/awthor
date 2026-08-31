@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createBookMarkdown, createPdfDocumentTitle } from "./book-export";
+import { createBookMarkdown, createPdfDocumentTitle, createPdfFilename } from "./book-export";
 import type { Book, Chapter } from "./repository";
 
 const now = "2026-08-28T00:00:00.000Z";
@@ -66,6 +66,9 @@ describe("book export", () => {
   test("creates a filesystem-friendly PDF document title", () => {
     expect(createPdfDocumentTitle({ ...book, title: "Draft: Part / One" })).toBe(
       "Draft- Part - One — Awthor",
+    );
+    expect(createPdfFilename({ ...book, title: "Draft: Part / One" })).toBe(
+      "Draft- Part - One.pdf",
     );
   });
 });

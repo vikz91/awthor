@@ -11,6 +11,7 @@
 [![Biome](https://img.shields.io/badge/Biome-2.4.2-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
 [![Harper](https://img.shields.io/badge/Proofreading-Harper.js-D97706)](https://writewithharper.com/)
 [![Clerk](https://img.shields.io/badge/Optional_Accounts-Clerk-6C47FF?logo=clerk&logoColor=white)](https://clerk.com/)
+[![MongoDB](https://img.shields.io/badge/Optional_Sync-MongoDB-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![WebMCP](https://img.shields.io/badge/WebMCP-Site_Tools-C2412D)](https://learn.chatgpt.com/docs/webmcp)
 [![Markdown](https://img.shields.io/badge/Editor-GFM-000000?logo=markdown&logoColor=white)](https://github.github.com/gfm/)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
@@ -22,9 +23,13 @@ manuscripts in an Awthor server database: books, chapters, characters, settings,
 positions remain in the current browser. IndexedDB stores book-domain records while localStorage
 is limited to small bootstrap and global-preference values.
 
-Awthor is local-first by default: no account is required to write. An optional email account
-foundation is available for the future sync release, but signing in today does not upload any books,
-profile details, settings, or manuscript content.
+Awthor is local-first by default: no account is required to write. Signing in does not upload any
+books, profile details, settings, or manuscript content. Selecting **Sync** is the explicit action
+that copies the full writing workspace to the signed-in account for use on another device.
+
+After that first manual sync, Awthor keeps the workspace current in the background after a real
+local change, when the browser reconnects, or when a previously synced workspace is reopened. It
+does not poll or continuously push data. Sync is intentionally event-driven and remains optional.
 
 There is no pricing tier. Awthor is completely free and distributed under the
 [GNU Affero General Public License v3.0](LICENSE).
@@ -63,8 +68,8 @@ selection, and follow the normal local autosave path. No permanent formatting to
 
 The top-bar Export menu works on the complete book. **Copy Markdown** combines the title matter,
 optional preface, and every chapter into one clipboard-ready Markdown manuscript. **Export as PDF**
-opens the browser's local print dialog with a dedicated light, paginated book layout; choose Save as
-PDF to create the file. Export content is assembled entirely in the browser and is never uploaded.
+generates and downloads a paginated PDF directly in the browser, including on mobile—no desktop
+print dialog required. Export content is assembled entirely in the browser and is never uploaded.
 
 The Focus icon beside Read/Write enters a temporary distraction-free workspace. Awthor requests
 browser fullscreen when available and falls back to an in-page full-viewport layout when it is not;
@@ -86,6 +91,11 @@ On desktop the toolbar reveals near the bottom edge, remains available while foc
 open, and automatically collapses to a visible Tools cue. Moving near the bottom edge, clicking the
 cue, or using the keyboard shortcut reveals it again. Touch users receive a persistent compact
 control above the safe area. Reduced-motion preferences are respected.
+
+The workspace also supports **Focus mode** for distraction-free reading and writing, plus a
+document-layout control for a continuous Google Docs-style canvas or paginated pages. Both
+preferences stay on-device and preserve the current chapter, scroll position, and editor caret
+while you switch.
 
 Keyboard shortcuts:
 
@@ -133,25 +143,33 @@ host under the same rules.
 Because data belongs to one browser origin, export backups regularly before clearing site data,
 changing browsers, or moving devices.
 
-### Optional accounts and future sync
+### Optional accounts and sync
 
 Awthor uses [Clerk](https://clerk.com/) for the optional account foundation. It supports email
 verification codes only; passwords and social providers are intentionally not enabled. Creating an
-account is voluntary and prepares identity for a future multi-device sync and authenticated remote
-MCP service. It does not change `AwthorRepository`, upload local data, or connect an account email
-to the separate author-profile email.
+account is voluntary and enables multi-device sync. It does not connect an account email to the
+separate author-profile email. Sign-in alone changes nothing in browser storage; the first explicit
+Sync merges this device with the account workspace.
 
-To enable the account controls in a deployment, configure both values below in the deployment
-environment. When either one is absent, Awthor remains fully functional and local-only.
+To enable account-backed sync in a deployment, configure Clerk and MongoDB in the deployment
+environment. When the account or database configuration is absent, Awthor remains fully functional
+and local-only.
 
 ```bash
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
 CLERK_SECRET_KEY=sk_...
+MONGODB_URI=mongodb+srv://...
+MONGODB_DB=awthor
 ```
 
-In the Clerk dashboard, keep only **Email verification code** enabled. The future sync service will
-use Clerk's immutable user ID to isolate each author's cloud workspace; it will be introduced only
-with explicit sync consent and a separate privacy update.
+In the Clerk dashboard, keep only **Email verification code** enabled. MongoDB records are scoped by
+Clerk's immutable user ID. Sync chooses the newest edit for each matching record, using device ID as
+a deterministic tie-breaker, so simultaneous edits to the same item may replace the older copy.
+
+The first click on **Sync** is deliberate consent to upload the current full workspace. Thereafter,
+Awthor schedules background sync only for a meaningful local mutation, browser reconnect/focus, or
+one refresh when reopening an already-synced workspace—never on a timer. The visible Sync control
+always provides the current status and last successful sync time, and can be used to retry.
 
 ## WebMCP Site Tools
 
@@ -200,8 +218,7 @@ to the assistant, so it is available only when the AI host invokes that named to
 
 This first version intentionally has no delete, character, proofreading, arbitrary navigation, or
 general storage tool. WebMCP support and availability depend on the browser or AI host implementing
-the evolving API. It remains page-scoped and local-only; a future remote MCP service requires the
-separate optional cloud-sync release.
+the evolving API. It remains page-scoped and local-only; it does not use the optional cloud-sync service.
 
 ## Themes
 
@@ -223,8 +240,10 @@ states so both themes retain the same layout and accessible interaction states.
 | Styling | [Tailwind CSS 4](https://tailwindcss.com/) | Responsive utilities and semantic design tokens |
 | Components | [shadcn](https://ui.shadcn.com/) + [Base UI](https://base-ui.com/) | Accessible, locally owned primitives and drawers/dialogs |
 | Markdown | [`react-markdown`](https://github.com/remarkjs/react-markdown) + [`remark-gfm`](https://github.com/remarkjs/remark-gfm) | Safe Markdown and GFM rendering without raw HTML |
+| PDF export | [`@react-pdf/renderer`](https://react-pdf.org/) + Noto Serif Bengali | Client-generated, downloadable paginated PDFs with Bengali text support |
 | Proofreading | [Harper.js](https://writewithharper.com/) | Lazy, worker-backed, on-device writing feedback |
-| Optional accounts | [Clerk](https://clerk.com/) | Email-code identity foundation for future opt-in sync |
+| Optional accounts | [Clerk](https://clerk.com/) | Email-code identity and opt-in sync ownership |
+| Sync storage | [MongoDB Node.js Driver](https://www.mongodb.com/docs/drivers/node/current/) | Server-only, account-scoped multi-device workspace records |
 | AI browser tools | [WebMCP Site Tools](https://learn.chatgpt.com/docs/webmcp) | Feature-detected local book, chapter, backup, navigation, and scroll actions |
 | Validation | [Zod 4](https://zod.dev/) | Runtime validation and backup/migration parsing |
 | Backup archives | [`fflate`](https://github.com/101arrowz/fflate) | Client-only ZIP creation and extraction for portable local backups |
@@ -292,6 +311,8 @@ src/
     ├── markdown/             # Counting and URL-safety helpers
     ├── proofreading/         # Engine-neutral service plus Harper adapter
     ├── repository/           # Product contract, IndexedDB v3, migration, autosave, and seed data
+    ├── sync/                 # Client sync metadata, record reconciliation, and sync transport
+    ├── database/             # Server-only MongoDB connection and account-scoped sync records
     └── webmcp/               # Site-tool schemas, registration lifecycle, and workspace bridge
 ```
 
@@ -300,7 +321,7 @@ src/
 development and theme requirements for coding agents.
 
 Set `NEXT_PUBLIC_SITE_URL` to the deployed origin so social metadata uses the correct absolute URL.
-No server-side manuscript database or pricing configuration is required.
+MongoDB is required only for the optional account sync feature; no pricing configuration is required.
 
 ## License
 

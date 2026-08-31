@@ -34,6 +34,11 @@ export function createPdfDocumentTitle(book: Book): string {
   return `${title} — Awthor`;
 }
 
+export function createPdfFilename(book: Book): string {
+  const title = singleLine(book.title, "Untitled book").replace(/[\\/:*?"<>|]+/gu, "-");
+  return `${title}.pdf`;
+}
+
 function singleLine(value: string, fallback = ""): string {
   return value.replace(/\s+/gu, " ").trim() || fallback;
 }

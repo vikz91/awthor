@@ -27,6 +27,8 @@ import {
 } from "react";
 import { AppTopBar } from "@/components/app-top-bar";
 import { SettingsInspector } from "@/components/settings-dialog";
+import { AccountMenu } from "@/components/sync-account-action";
+import { SyncControl } from "@/components/sync-control";
 import { Button } from "@/components/ui/button";
 import type { BookExportSnapshot } from "@/lib/book-export";
 import {
@@ -1757,6 +1759,8 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                 onRetry={() => void flushCurrentDraft()}
                 state={saveState}
               />
+              <SyncControl variant="navbar" />
+              <AccountMenu />
               <div className="flex items-center rounded-xl border border-border bg-muted/40 p-0.5">
                 <Button
                   aria-keyshortcuts="Alt+R"

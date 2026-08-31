@@ -1181,7 +1181,12 @@ class IndexedDbAwthorRepository implements AwthorRepository {
       () => undefined,
       () => undefined,
     );
-    return result;
+    return result.then((value) => {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("awthor:repository-mutated"));
+      }
+      return value;
+    });
   }
 }
 
