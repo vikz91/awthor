@@ -1,3 +1,4 @@
+import { auth } from "@clerk/nextjs/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { getAwthorDatabase } from "@/lib/database/mongodb";
 import { createRemoteWorkspaceService } from "@/lib/database/remote-workspace";
@@ -50,7 +51,8 @@ async function requestHandler(request: Request): Promise<Response> {
   const originResponse = validateMcpRequestOrigin(request);
   if (originResponse) return originResponse;
 
-  const authentication = await authenticateMcpBearerRequest(request);
+  const clerkAuthentication = await auth({ acceptsToken: "oauth_token" });
+  const authentication = authenticateMcpBearerRequest(request, clerkAuthentication);
   if (isMcpAuthenticationFailure(authentication)) {
     return createMcpAuthenticationError(authentication);
   }

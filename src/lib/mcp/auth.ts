@@ -1,4 +1,3 @@
-import { verifyToken } from "@clerk/backend";
 import { type McpConfiguration, type McpScope, mcpConfiguration } from "./config";
 
 export type McpPrincipal = {
@@ -15,7 +14,18 @@ export type McpAuthenticationFailure = {
   status: 401 | 403 | 503;
 };
 
-type TokenVerifier = (token: string) => Promise<Record<string, unknown>>;
+/**
+ * The subset of Clerk's `auth({ acceptsToken: "oauth_token" })` result that
+ * Awthor needs. OAuth access tokens can be opaque, so Clerk must authenticate
+ * the request instead of Awthor treating them as app-session JWTs.
+ */
+export type ClerkOAuthAuthentication = {
+  clientId: string | null;
+  isAuthenticated: boolean;
+  scopes: readonly string[] | null;
+  tokenType: string | null;
+  userId: string | null;
+};
 
 function parseBearerToken(header: string | null): string | null {
   if (!header) return null;
@@ -30,21 +40,15 @@ function parseScopes(scope: unknown, configuration: McpConfiguration): McpScope[
     .filter((item): item is McpScope => configuration.supportedScopes.includes(item as McpScope));
 }
 
-function getStringClaim(claims: Record<string, unknown>, key: string): string | null {
-  const claim = claims[key];
-  return typeof claim === "string" && claim.length > 0 ? claim : null;
-}
-
-/** Verifies only OAuth Bearer credentials; Clerk app sessions are deliberately ignored. */
-export async function verifyMcpAccessToken(
+/**
+ * Maps Clerk's already-verified OAuth request identity into Awthor's scoped
+ * principal. App sessions and every non-OAuth machine token are rejected.
+ */
+export function authenticateMcpOAuthIdentity(
+  identity: ClerkOAuthAuthentication,
   token: string,
-  tokenVerifier: TokenVerifier = (accessToken) =>
-    verifyToken(accessToken, {
-      audience: mcpConfiguration.resourceUrl ?? undefined,
-      secretKey: process.env.CLERK_SECRET_KEY,
-    }) as Promise<Record<string, unknown>>,
   configuration: McpConfiguration = mcpConfiguration,
-): Promise<McpPrincipal | McpAuthenticationFailure> {
+): McpPrincipal | McpAuthenticationFailure {
   if (
     !configuration.enabled ||
     !configuration.resourceUrl ||
@@ -57,53 +61,46 @@ export async function verifyMcpAccessToken(
     };
   }
 
-  try {
-    const claims = await tokenVerifier(token);
-    const issuer = getStringClaim(claims, "iss");
-    const userId = getStringClaim(claims, "sub");
-
-    if (issuer !== configuration.authorizationServerUrl || !userId) {
-      return {
-        error: "invalid_token",
-        message: "The access token is not valid for Awthor MCP.",
-        status: 401,
-      };
-    }
-
-    const scopes = parseScopes(claims.scope, configuration);
-    if (scopes.length === 0) {
-      return {
-        error: "insufficient_scope",
-        message: "The access token does not grant an Awthor MCP scope.",
-        status: 403,
-      };
-    }
-
-    return {
-      clientId: getStringClaim(claims, "client_id") ?? getStringClaim(claims, "azp") ?? "",
-      expiresAt: typeof claims.exp === "number" ? claims.exp : undefined,
-      scopes,
-      token,
-      userId,
-    };
-  } catch {
+  if (
+    !identity.isAuthenticated ||
+    identity.tokenType !== "oauth_token" ||
+    !identity.userId ||
+    !identity.clientId
+  ) {
     return {
       error: "invalid_token",
       message: "The Bearer access token is invalid or expired.",
       status: 401,
     };
   }
+
+  const scopes = parseScopes(identity.scopes?.join(" "), configuration);
+  if (scopes.length === 0) {
+    return {
+      error: "insufficient_scope",
+      message: "The access token does not grant an Awthor MCP scope.",
+      status: 403,
+    };
+  }
+
+  return {
+    clientId: identity.clientId,
+    scopes,
+    token,
+    userId: identity.userId,
+  };
 }
 
-export async function authenticateMcpBearerRequest(
+export function authenticateMcpBearerRequest(
   request: Request,
-): Promise<McpPrincipal | McpAuthenticationFailure> {
+  identity: ClerkOAuthAuthentication,
+): McpPrincipal | McpAuthenticationFailure {
   const token = parseBearerToken(request.headers.get("authorization"));
   if (!token) {
     return { error: "invalid_token", message: "A Bearer access token is required.", status: 401 };
   }
 
-  return verifyMcpAccessToken(token);
+  return authenticateMcpOAuthIdentity(identity, token);
 }
 
 export function isMcpAuthenticationFailure(
