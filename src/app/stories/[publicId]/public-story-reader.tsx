@@ -23,6 +23,7 @@ export function PublicStoryReader({ story }: PublicStoryReaderProps) {
   const chapterRefs = useRef<Record<string, HTMLElement | null>>({});
   const [layout, setLayout] = useState<Layout>("seamless");
   const [fullscreen, setFullscreen] = useState(false);
+  const [activeChapterId, setActiveChapterId] = useState(story.chapters[0]?.id ?? "");
   const totalWords = useMemo(
     () =>
       story.chapters.reduce((total, chapter) => total + countManuscript(chapter.body).wordCount, 0),
@@ -65,6 +66,26 @@ export function PublicStoryReader({ story }: PublicStoryReaderProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [fullscreen]);
 
+  useEffect(() => {
+    const chapters = story.chapters
+      .map((chapter) => chapterRefs.current[chapter.id])
+      .filter((chapter): chapter is HTMLElement => chapter !== null);
+    if (chapters.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top);
+        const next = visible[0]?.target.id;
+        if (next) setActiveChapterId(next);
+      },
+      { rootMargin: "-18% 0px -68%", threshold: 0 },
+    );
+    for (const chapter of chapters) observer.observe(chapter);
+    return () => observer.disconnect();
+  }, [story.chapters]);
+
   function setChapterRef(id: string, element: HTMLElement | null) {
     chapterRefs.current[id] = element;
   }
@@ -72,6 +93,7 @@ export function PublicStoryReader({ story }: PublicStoryReaderProps) {
   function goToChapter(id: string) {
     const target = chapterRefs.current[id];
     if (!target) return;
+    setActiveChapterId(id);
     target.scrollIntoView({
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
       block: "start",
@@ -171,6 +193,7 @@ export function PublicStoryReader({ story }: PublicStoryReaderProps) {
               return (
                 <section
                   className="scroll-mt-8 py-12 sm:py-16"
+                  id={chapter.id}
                   key={chapter.id}
                   ref={(element) => setChapterRef(chapter.id, element)}
                 >
@@ -205,28 +228,35 @@ export function PublicStoryReader({ story }: PublicStoryReaderProps) {
 
       <nav
         aria-label="Jump to a chapter"
-        className="fixed top-1/2 right-3 z-20 hidden -translate-y-1/2 lg:block xl:right-7"
+        className="fixed top-1/2 right-1.5 z-30 -translate-y-1/2 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100 motion-reduce:transition-none sm:right-4 lg:opacity-45 xl:right-7"
       >
-        <ol className="flex flex-col items-center gap-1 rounded-full border border-border bg-popover/90 p-1.5 shadow-sm backdrop-blur">
-          {story.chapters.map((chapter) => (
-            <li key={chapter.id}>
-              <button
-                aria-label={`Go to Chapter ${chapter.number}: ${chapter.title}`}
-                className="group relative grid size-8 place-items-center rounded-full text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                onClick={() => goToChapter(chapter.id)}
-                title={`Chapter ${chapter.number}: ${chapter.title}`}
-                type="button"
-              >
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 rounded-full bg-current group-hover:size-2"
-                />
-                <span className="pointer-events-none absolute top-1/2 right-10 hidden w-52 -translate-y-1/2 truncate rounded-md border border-border bg-popover px-2 py-1 text-left text-xs text-popover-foreground shadow-md group-hover:block group-focus-visible:block">
-                  {chapter.number}. {chapter.title}
-                </span>
-              </button>
-            </li>
-          ))}
+        <ol className="relative flex max-h-[55dvh] flex-col items-center overflow-y-auto py-1 [scrollbar-width:none] before:absolute before:top-4 before:bottom-4 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-border before:content-[''] [&::-webkit-scrollbar]:hidden">
+          {story.chapters.map((chapter) => {
+            const isActive = chapter.id === activeChapterId;
+            return (
+              <li key={chapter.id}>
+                <button
+                  aria-current={isActive ? "location" : undefined}
+                  aria-label={`Go to Chapter ${chapter.number}: ${chapter.title}`}
+                  className="group relative grid size-6 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring sm:size-7"
+                  onClick={() => goToChapter(chapter.id)}
+                  title={`Chapter ${chapter.number}: ${chapter.title}`}
+                  type="button"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "relative z-10 w-1.5 rounded-full border border-background bg-muted-foreground transition-[height,background-color] motion-reduce:transition-none",
+                      isActive ? "h-4 bg-primary" : "h-1.5 group-hover:bg-foreground",
+                    )}
+                  />
+                  <span className="pointer-events-none absolute top-1/2 right-7 hidden w-52 -translate-y-1/2 truncate rounded-md border border-border bg-popover px-2 py-1 text-left text-[0.65rem] font-medium text-popover-foreground shadow-md group-hover:block group-focus-visible:block">
+                    Chapter {chapter.number}: {chapter.title}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ol>
       </nav>
     </main>
