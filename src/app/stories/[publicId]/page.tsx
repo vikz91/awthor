@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { MarkdownManuscript } from "@/app/books/[bookId]/markdown-manuscript";
 import { getAwthorDatabase } from "@/lib/database/mongodb";
 import { getPublishedStoryByPublicId } from "@/lib/database/published-stories";
+import { withoutLeadingMarkdownTitle } from "@/lib/markdown";
 
 type StoryPageProps = {
   params: Promise<{ publicId: string }>;
@@ -28,6 +29,10 @@ export default async function PublicStoryPage({ params }: StoryPageProps) {
   const { publicId } = await params;
   const story = await getStory(publicId);
   if (!story) notFound();
+  const series =
+    story.book.isPartOfSeries && story.book.seriesName.trim()
+      ? `${story.book.seriesName}${story.book.seriesPosition ? ` · Book ${story.book.seriesPosition}` : ""}`
+      : null;
 
   return (
     <main className="min-h-dvh bg-background px-5 py-14 text-foreground sm:px-8 sm:py-20">
@@ -48,6 +53,11 @@ export default async function PublicStoryPage({ params }: StoryPageProps) {
           <p className="text-sm tracking-[0.24em] text-muted-foreground uppercase">
             An Awthor story
           </p>
+          {series ? (
+            <p className="mt-5 text-sm tracking-[0.18em] text-muted-foreground uppercase">
+              {series}
+            </p>
+          ) : null}
           <h1 className="mt-5 font-serif text-4xl leading-tight font-medium tracking-[-0.03em] sm:text-6xl">
             {story.book.title}
           </h1>
@@ -75,11 +85,13 @@ export default async function PublicStoryPage({ params }: StoryPageProps) {
               <p className="text-sm tracking-[0.2em] text-muted-foreground uppercase">
                 Chapter {chapter.number}
               </p>
-              <h2 className="mt-4 font-serif text-3xl leading-tight font-medium tracking-[-0.025em] sm:text-4xl">
-                {chapter.title}
-              </h2>
+              {chapter.title.trim() !== story.book.title.trim() ? (
+                <h2 className="mt-4 font-serif text-3xl leading-tight font-medium tracking-[-0.025em] sm:text-4xl">
+                  {chapter.title}
+                </h2>
+              ) : null}
               <div className="mt-8 font-serif text-lg sm:text-xl">
-                <MarkdownManuscript source={chapter.body} />
+                <MarkdownManuscript source={withoutLeadingMarkdownTitle(chapter.body)} />
               </div>
             </section>
           ))}
