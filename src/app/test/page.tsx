@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { TestDataWorkspace } from "./test-data-workspace";
 
 export const metadata: Metadata = {
-  title: "Local data lab",
-  description: "Seed, clear, export, and import Awthor's device-local test data.",
+  title: "System",
+  description: "Inspect, back up, and restore Awthor's device-local data.",
 };
 
 export default function TestPage() {

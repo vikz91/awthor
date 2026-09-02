@@ -121,6 +121,7 @@ export function BookManagementDialog({
           onSubmit={handleSubmit}
         >
           <BookCover
+            author={form.author}
             bookId={book?.id ?? "new-awthor-book"}
             className="mx-auto w-28 shadow-sm sm:mx-0 sm:w-full"
             coverUrl={form.coverUrl}

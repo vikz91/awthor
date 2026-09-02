@@ -309,10 +309,10 @@ export function TestDataWorkspace() {
           <div>
             <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.16em] text-primary">
               <Database aria-hidden="true" className="size-4" />
-              Developer utility
+              Local workspace
             </div>
             <h1 className="mt-3 font-heading text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
-              Local data lab
+              System
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
               Seed the IndexedDB repository, inspect its portable backup, or verify import and

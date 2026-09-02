@@ -59,7 +59,7 @@ There is no pricing tier. Awthor is completely free and distributed under the
 | `/` | Minimal landing page with product, privacy, and open-source positioning |
 | `/books` | Searchable, cover-first local library with book and author settings dialogs |
 | `/books/[bookId]` | Unified Markdown reader/writer with chapters and in-place writing tools |
-| `/test` | Local repository diagnostics for seeding, clearing, importing, and exporting data |
+| `/test` | **System** — local repository diagnostics for seeding, clearing, importing, and exporting data |
 
 `/stories/[publicId]` is intentionally outside the private app: it is the read-only, unlisted
 public snapshot created only when a signed-in writer publishes a synced book.
@@ -334,7 +334,7 @@ bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Visit `/test` and choose **Seed or replace** to
+Open [http://localhost:3000](http://localhost:3000). Visit **System** at `/test` and choose **Seed or replace** to
 load the bundled Markdown demo workspace.
 
 ## Scripts
@@ -369,7 +369,7 @@ src/
 │   ├── books/                # Repository-backed local library
 │   ├── stories/[publicId]/    # Unlisted, read-only published-story reader
 │   ├── api/                  # Authenticated sync, publishing, and remote MCP handlers
-│   ├── test/                 # Repository diagnostics, storage migration, and backup controls
+│   ├── test/                 # System: repository diagnostics, migration, and backup controls
 │   ├── globals.css           # Paper/Stone semantic tokens
 │   └── page.tsx              # Landing screen
 ├── components/

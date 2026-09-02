@@ -8,12 +8,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Database,
   LoaderCircle,
   Maximize2,
   PenLine,
   RefreshCw,
   Settings2,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   type ChangeEvent,
@@ -1796,6 +1798,16 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
               </div>
               <BookPublish bookId={book.id} />
               <BookExport snapshot={exportSnapshot} />
+              <Button
+                aria-label="Open system"
+                nativeButton={false}
+                render={<Link href="/test" />}
+                size="icon-sm"
+                title="System"
+                variant="ghost"
+              >
+                <Database aria-hidden="true" />
+              </Button>
               <Button
                 aria-label="Enter focus mode"
                 disabled={!currentChapter}

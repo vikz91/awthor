@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 type BookCoverProps = {
   bookId: string;
   title: string;
+  author?: string;
   coverUrl?: string | null;
   className?: string;
 };
@@ -81,8 +82,9 @@ function GeneratedCover({ bookId, title }: Pick<BookCoverProps, "bookId" | "titl
   );
 }
 
-export function BookCover({ bookId, title, coverUrl, className }: BookCoverProps) {
+export function BookCover({ bookId, title, author, coverUrl, className }: BookCoverProps) {
   const safeCoverUrl = sanitizeRemoteImageUrl(coverUrl);
+  const displayAuthor = author?.trim() || "Awthor";
 
   return (
     <div className={cn("relative aspect-[2/3] overflow-hidden rounded-2xl", className)}>
@@ -101,6 +103,14 @@ export function BookCover({ bookId, title, coverUrl, className }: BookCoverProps
       ) : (
         <GeneratedCover bookId={bookId} title={title} />
       )}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-cover-overlay px-4 pt-8 pb-4 text-cover-foreground sm:px-5 sm:pt-10 sm:pb-5">
+        <p className="line-clamp-3 font-heading text-lg leading-[1.02] font-semibold tracking-[-0.035em] sm:text-xl">
+          {title}
+        </p>
+        <p className="mt-2 line-clamp-1 text-[0.62rem] font-semibold tracking-[0.18em] uppercase opacity-85 sm:text-[0.68rem]">
+          {displayAuthor}
+        </p>
+      </div>
     </div>
   );
 }

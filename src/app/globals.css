@@ -41,6 +41,8 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-overlay: var(--overlay);
+  --color-cover-overlay: var(--cover-overlay);
+  --color-cover-foreground: var(--cover-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -57,6 +59,8 @@
   --foreground: oklch(0.255 0.018 68);
   --card: oklch(0.985 0.014 84);
   --overlay: oklch(0.15 0.01 80 / 0.3);
+  --cover-overlay: oklch(0.15 0.01 80 / 0.82);
+  --cover-foreground: oklch(0.975 0.012 84);
   --card-foreground: oklch(0.255 0.018 68);
   --popover: oklch(0.99 0.012 84);
   --popover-foreground: oklch(0.255 0.018 68);
@@ -95,6 +99,8 @@
   --foreground: oklch(0.88 0.018 84);
   --card: oklch(0.25 0.015 80);
   --overlay: oklch(0.05 0.01 80 / 0.62);
+  --cover-overlay: oklch(0.05 0.01 80 / 0.86);
+  --cover-foreground: oklch(0.975 0.012 84);
   --card-foreground: oklch(0.88 0.018 84);
   --popover: oklch(0.27 0.015 80);
   --popover-foreground: oklch(0.88 0.018 84);

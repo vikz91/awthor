@@ -2,6 +2,7 @@
 
 import {
   BookOpen,
+  Database,
   HardDrive,
   Library,
   LoaderCircle,
@@ -31,7 +32,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { type Book, getAwthorRepository, type OnboardingDetails } from "@/lib/repository";
+import { calculateReadingProgress, type ReadingProgress } from "@/lib/reading-progress";
+import {
+  type AppSettings,
+  type Book,
+  getAwthorRepository,
+  type OnboardingDetails,
+} from "@/lib/repository";
 import { readRepositoryChange, repositoryChangedEventName } from "@/lib/webmcp/workspace-bridge";
 import { BookManagementDialog, DeleteBookDialog } from "./book-management-dialog";
 
@@ -91,6 +98,9 @@ export function BooksLibrary() {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [books, setBooks] = useState<Book[]>([]);
   const [profile, setProfile] = useState<OnboardingDetails | null>(null);
+  const [readingProgressByBook, setReadingProgressByBook] = useState<
+    Record<string, ReadingProgress>
+  >({});
   const [query, setQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bookDialogOpen, setBookDialogOpen] = useState(false);
@@ -114,12 +124,16 @@ export function BooksLibrary() {
         return;
       }
 
-      const [savedBooks, savedProfile] = await Promise.all([
+      const [savedBooks, savedProfile, savedSettings] = await Promise.all([
         repository.books.get(),
         repository.profile.get(),
+        repository.settings.get(),
       ]);
-      setBooks(savedBooks ?? []);
+      const nextBooks = savedBooks ?? [];
+      const progressEntries = await loadReadingProgress(nextBooks, savedSettings);
+      setBooks(nextBooks);
       setProfile(savedProfile);
+      setReadingProgressByBook(Object.fromEntries(progressEntries));
       setLoadState({ status: "ready" });
     } catch (cause) {
       setLoadState({
@@ -274,6 +288,16 @@ export function BooksLibrary() {
             <SyncControl variant="navbar" />
             <AccountMenu />
             <Button
+              aria-label="Open system"
+              nativeButton={false}
+              render={<Link href="/test" />}
+              size="icon"
+              title="System"
+              variant="ghost"
+            >
+              <Database aria-hidden="true" />
+            </Button>
+            <Button
               aria-label="Author and app settings"
               onClick={() => updateSettingsQuery(true)}
               size="icon"
@@ -345,6 +369,7 @@ export function BooksLibrary() {
                       key={book.id}
                       onDelete={() => setDeletingBook(book)}
                       onEdit={() => openEditBook(book)}
+                      readingProgress={readingProgressByBook[book.id]}
                     />
                   ))}
                 </div>
@@ -366,6 +391,10 @@ export function BooksLibrary() {
         book={deletingBook}
         onDeleted={(bookId) => {
           setBooks((current) => current.filter((book) => book.id !== bookId));
+          setReadingProgressByBook((current) => {
+            const { [bookId]: _removed, ...remaining } = current;
+            return remaining;
+          });
           setDeletingBook(null);
         }}
         onOpenChange={(open) => {
@@ -383,11 +412,21 @@ function BookCard({
   book,
   onDelete,
   onEdit,
+  readingProgress,
 }: {
   book: Book;
   onDelete: () => void;
   onEdit: () => void;
+  readingProgress?: ReadingProgress;
 }) {
+  const progress = readingProgress ?? { percent: 0, remainingMinutes: 0 };
+  const readingLabel =
+    book.wordCount === 0
+      ? "No reading time yet"
+      : progress.remainingMinutes === 0
+        ? "Finished"
+        : `${progress.remainingMinutes} min left`;
+
   return (
     <article className="group min-w-0">
       <div className="relative">
@@ -397,6 +436,7 @@ function BookCard({
           href={`/books/${encodeURIComponent(book.id)}`}
         >
           <BookCover
+            author={book.author}
             bookId={book.id}
             className="w-full shadow-sm ring-1 ring-foreground/5 transition-shadow group-hover:shadow-lg"
             coverUrl={book.coverUrl}
@@ -443,11 +483,48 @@ function BookCard({
           {numberFormatter.format(book.wordCount)} words · {book.chapterCount}{" "}
           {book.chapterCount === 1 ? "chapter" : "chapters"}
         </p>
+        <div className="mt-3" title={`${progress.percent}% read · ${readingLabel}`}>
+          <div
+            aria-label={`${progress.percent}% of ${book.title} read`}
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={progress.percent}
+            className="h-1 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-300 motion-reduce:transition-none"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
+            {progress.percent}% read · {readingLabel}
+          </p>
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">
           Updated {formatUpdatedAt(book.updatedAt)}
         </p>
       </div>
     </article>
+  );
+}
+
+async function loadReadingProgress(books: readonly Book[], settings: AppSettings | null) {
+  const lastChapterByBook = settings?.lastChapterByBook ?? {};
+  const readingPositionByBook = settings?.readingPositionByBook ?? {};
+
+  return Promise.all(
+    books.map(async (book) => {
+      const chapters = (await repository.chapters.list(book.id)) ?? [];
+      return [
+        book.id,
+        calculateReadingProgress({
+          chapters,
+          lastChapterId: lastChapterByBook[book.id],
+          position: readingPositionByBook[book.id],
+        }),
+      ] as const;
+    }),
   );
 }
 
