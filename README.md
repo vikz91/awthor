@@ -14,6 +14,7 @@
 [![MongoDB](https://img.shields.io/badge/Optional_Sync-MongoDB-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![WebMCP](https://img.shields.io/badge/WebMCP-Site_Tools-C2412D)](https://learn.chatgpt.com/docs/webmcp)
 [![Markdown](https://img.shields.io/badge/Editor-GFM-000000?logo=markdown&logoColor=white)](https://github.github.com/gfm/)
+[![EPUB](https://img.shields.io/badge/Export-EPUB_3-4A8A08)](https://www.w3.org/publishing/epub3/)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-4D7C0F?logo=gnu&logoColor=white)](LICENSE)
 ![Storage](https://img.shields.io/badge/Manuscript_Storage-Your_Device-5F6B4E)
@@ -36,7 +37,22 @@ It does not poll or continuously push data. Sync is intentionally event-driven a
 There is no pricing tier. Awthor is completely free and distributed under the
 [GNU Affero General Public License v3.0](LICENSE).
 
-## Four screens
+## Highlights
+
+- **One calm workspace** — read and write the same Markdown chapter without a route change,
+  with seamless or paginated document layouts and a distraction-free Focus mode.
+- **Local writing tools** — on-device Harper proofreading, character dossiers, chapter arcs,
+  selection formatting, live counts, and keyboard-first controls.
+- **Portable work** — export a complete book as PDF, EPUB 3, or combined Markdown; export and
+  import full local-workspace backups whenever you need them.
+- **Optional multi-device sync** — Clerk identity and MongoDB sync are opt-in. The first Sync is
+  explicit; later sync runs only after meaningful events and transfers changed records only.
+- **Two MCP boundaries** — browser-scoped WebMCP works with the local device; an optional,
+  OAuth-protected remote MCP works with the writer's already-synced cloud workspace.
+- **Unlisted sharing** — publish a separate, read-only snapshot of a synced book at an unlisted
+  URL, then republish or turn it off without changing the private manuscript.
+
+## Four private app screens
 
 | Route | Purpose |
 | --- | --- |
@@ -44,6 +60,9 @@ There is no pricing tier. Awthor is completely free and distributed under the
 | `/books` | Searchable, cover-first local library with book and author settings dialogs |
 | `/books/[bookId]` | Unified Markdown reader/writer with chapters and in-place writing tools |
 | `/test` | Local repository diagnostics for seeding, clearing, importing, and exporting data |
+
+`/stories/[publicId]` is intentionally outside the private app: it is the read-only, unlisted
+public snapshot created only when a signed-in writer publishes a synced book.
 
 Retired URLs remain compatible through temporary redirects:
 
@@ -71,7 +90,9 @@ selection, and follow the normal local autosave path. No permanent formatting to
 The top-bar Export menu works on the complete book. **Copy Markdown** combines the title matter,
 optional preface, and every chapter into one clipboard-ready Markdown manuscript. **Export as PDF**
 generates and downloads a paginated PDF directly in the browser, including on mobile—no desktop
-print dialog required. Export content is assembled entirely in the browser and is never uploaded.
+print dialog required. **Download EPUB** creates a cover-free, reflowable EPUB 3 with a table of
+contents, title page, preface, and ordered chapters. All export content is assembled entirely in
+the browser and is never uploaded.
 
 The Focus icon beside Read/Write enters a temporary distraction-free workspace. Awthor requests
 browser fullscreen when available and falls back to an in-page full-viewport layout when it is not;
@@ -171,7 +192,10 @@ a deterministic tie-breaker, so simultaneous edits to the same item may replace 
 The first click on **Sync** is deliberate consent to upload the current full workspace. Thereafter,
 Awthor schedules background sync only for a meaningful local mutation, browser reconnect/focus, or
 one refresh when reopening an already-synced workspace—never on a timer. The visible Sync control
-always provides the current status and last successful sync time, and can be used to retry.
+always provides the current status and last successful sync time, and can be used to retry. Each
+record has a SHA-256 content fingerprint, so unchanged chapters are not uploaded again. Sync pulls
+cloud changes before pushing local work, and a delayed or empty device cannot turn absent local
+records into deletions; deletions are sent only from explicit local delete events.
 
 ### Private remote MCP and unlisted stories
 
@@ -194,9 +218,12 @@ Republishing refreshes the snapshot at the same URL; ordinary private edits do n
 `awthor_unpublish_book` disables the link without deleting the private synced book.
 
 Signed-in writers can also publish from an open book in Awthor. Publishing explicitly syncs that
-book, then creates the same unlisted, read-only snapshot. The public page shows the selected cover,
-author name, and author email from the writer's local profile. Writers can republish at the stable
-link or turn public access off at any time.
+book, then writes the same unlisted, read-only snapshot to the separate `publishedStories`
+collection. It does not expose the live private book. The public page shows the selected cover,
+book and series metadata, author name, and author email from the writer's local profile. It offers
+word count, an estimated reading time, the same chapter-position rail used by the private reader,
+seamless/page layouts, and full screen. Writers can republish at the stable link or turn public
+access off at any time.
 
 #### Remote MCP setup
 
@@ -279,6 +306,7 @@ states so both themes retain the same layout and accessible interaction states.
 | Components | [shadcn](https://ui.shadcn.com/) + [Base UI](https://base-ui.com/) | Accessible, locally owned primitives and drawers/dialogs |
 | Markdown | [`react-markdown`](https://github.com/remarkjs/react-markdown) + [`remark-gfm`](https://github.com/remarkjs/remark-gfm) | Safe Markdown and GFM rendering without raw HTML |
 | PDF export | [`@react-pdf/renderer`](https://react-pdf.org/) + Noto Serif Bengali | Client-generated, downloadable paginated PDFs with Bengali text support |
+| EPUB export | [`fflate`](https://github.com/101arrowz/fflate) | Client-generated, reflowable EPUB 3 archives with a navigation document |
 | Proofreading | [Harper.js](https://writewithharper.com/) | Lazy, worker-backed, on-device writing feedback |
 | Optional accounts | [Clerk](https://clerk.com/) | Email-code identity and opt-in sync ownership |
 | Sync storage | [MongoDB Node.js Driver](https://www.mongodb.com/docs/drivers/node/current/) | Server-only, account-scoped multi-device workspace records |
@@ -339,6 +367,8 @@ src/
 ├── app/
 │   ├── books/[bookId]/       # Unified Read/Write workspace and tool composition
 │   ├── books/                # Repository-backed local library
+│   ├── stories/[publicId]/    # Unlisted, read-only published-story reader
+│   ├── api/                  # Authenticated sync, publishing, and remote MCP handlers
 │   ├── test/                 # Repository diagnostics, storage migration, and backup controls
 │   ├── globals.css           # Paper/Stone semantic tokens
 │   └── page.tsx              # Landing screen
@@ -351,8 +381,8 @@ src/
     ├── proofreading/         # Engine-neutral service plus Harper adapter
     ├── repository/           # Product contract, IndexedDB v3, migration, autosave, and seed data
     ├── sync/                 # Client sync metadata, record reconciliation, and sync transport
-    ├── database/             # Server-only MongoDB connection and account-scoped sync records
-    ├── mcp/                  # OAuth-scoped remote MCP tool registry
+    ├── database/             # Server-only MongoDB sync records and published-story snapshots
+    ├── mcp/                  # OAuth-scoped remote MCP transport, auth, and tool registry
     └── webmcp/               # Site-tool schemas, registration lifecycle, and workspace bridge
 ```
 
