@@ -2,15 +2,17 @@
 
 import { Expand, Files, Rows3, Shrink } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownManuscript } from "@/app/books/[bookId]/markdown-manuscript";
 import { PagedManuscript } from "@/app/books/[bookId]/paged-manuscript";
 import { Button } from "@/components/ui/button";
-import type { PublishedStory } from "@/lib/database/published-story-snapshot";
+import type { PublishedSeriesStory, PublishedStory } from "@/lib/database/published-story-snapshot";
 import { countManuscript, withoutLeadingMarkdownTitle } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
 
 type PublicStoryReaderProps = {
+  seriesStories: readonly PublishedSeriesStory[];
   story: PublishedStory;
 };
 
@@ -18,7 +20,7 @@ type Layout = "pages" | "seamless";
 
 const wordsPerMinute = 238;
 
-export function PublicStoryReader({ story }: PublicStoryReaderProps) {
+export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderProps) {
   const rootRef = useRef<HTMLElement>(null);
   const chapterRefs = useRef<Record<string, HTMLElement | null>>({});
   const [layout, setLayout] = useState<Layout>("seamless");
@@ -223,6 +225,65 @@ export function PublicStoryReader({ story }: PublicStoryReaderProps) {
               );
             })}
           </div>
+          {seriesStories.length > 0 ? (
+            <section
+              aria-labelledby="more-in-series"
+              className="border-t border-border py-12 sm:py-16"
+            >
+              <p className="text-sm tracking-[0.2em] text-muted-foreground uppercase">
+                Continue reading
+              </p>
+              <h2
+                className="mt-3 font-serif text-3xl leading-tight font-medium tracking-[-0.025em] sm:text-4xl"
+                id="more-in-series"
+              >
+                More in {story.book.seriesName}
+              </h2>
+              <ul className="mt-7 grid gap-3 sm:grid-cols-2">
+                {seriesStories.map((seriesStory) => (
+                  <li key={seriesStory.publicId}>
+                    <Link
+                      className="group flex h-full gap-3 rounded-2xl border border-border bg-card p-3 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-ring"
+                      href={`/stories/${encodeURIComponent(seriesStory.publicId)}`}
+                    >
+                      {seriesStory.coverUrl ? (
+                        <Image
+                          alt=""
+                          className="aspect-[2/3] w-14 shrink-0 rounded-lg border border-border object-cover"
+                          height={126}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          src={seriesStory.coverUrl}
+                          unoptimized
+                          width={84}
+                        />
+                      ) : (
+                        <div
+                          aria-hidden="true"
+                          className="aspect-[2/3] w-14 shrink-0 rounded-lg bg-muted"
+                        />
+                      )}
+                      <div className="min-w-0 self-center">
+                        {seriesStory.seriesPosition ? (
+                          <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                            Book {seriesStory.seriesPosition}
+                          </p>
+                        ) : null}
+                        <h3 className="mt-1 line-clamp-2 font-serif text-xl leading-tight font-medium group-hover:text-primary">
+                          {seriesStory.title}
+                        </h3>
+                        {seriesStory.subtitle ? (
+                          <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
+                            {seriesStory.subtitle}
+                          </p>
+                        ) : null}
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </article>
       </div>
 

@@ -21,6 +21,15 @@ export type PublishedStorySummary = Pick<
   "publicId" | "publishedAt" | "updatedAt"
 > & { url: string };
 
+/** The small, non-manuscript payload used to link published books in a series. */
+export type PublishedSeriesStory = {
+  coverUrl: string | null;
+  publicId: string;
+  seriesPosition: number | null;
+  subtitle: string;
+  title: string;
+};
+
 /** Intentionally excludes every manuscript-bearing field from the private UI API. */
 export function toPublishedStorySummary(story: PublishedStory): PublishedStorySummary {
   return {
@@ -28,6 +37,16 @@ export function toPublishedStorySummary(story: PublishedStory): PublishedStorySu
     publishedAt: story.publishedAt,
     updatedAt: story.updatedAt,
     url: `/stories/${story.publicId}`,
+  };
+}
+
+export function toPublishedSeriesStory(story: PublishedStory): PublishedSeriesStory {
+  return {
+    coverUrl: story.book.coverUrl,
+    publicId: story.publicId,
+    seriesPosition: story.book.seriesPosition,
+    subtitle: story.book.subtitle,
+    title: story.book.title,
   };
 }
 

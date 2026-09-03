@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAwthorDatabase } from "@/lib/database/mongodb";
-import { getPublishedStoryByPublicId } from "@/lib/database/published-stories";
+import {
+  getPublishedStoryByPublicId,
+  listPublishedStoriesInSeries,
+} from "@/lib/database/published-stories";
 import { PublicStoryReader } from "./public-story-reader";
 
 type StoryPageProps = {
@@ -27,7 +30,8 @@ export default async function PublicStoryPage({ params }: StoryPageProps) {
   const { publicId } = await params;
   const story = await getStory(publicId);
   if (!story) notFound();
-  return <PublicStoryReader story={story} />;
+  const seriesStories = await getSeriesStories(story);
+  return <PublicStoryReader seriesStories={seriesStories} story={story} />;
 }
 
 async function getStory(publicId: string) {
@@ -35,5 +39,13 @@ async function getStory(publicId: string) {
     return await getPublishedStoryByPublicId(await getAwthorDatabase(), publicId);
   } catch {
     return null;
+  }
+}
+
+async function getSeriesStories(story: NonNullable<Awaited<ReturnType<typeof getStory>>>) {
+  try {
+    return await listPublishedStoriesInSeries(await getAwthorDatabase(), story);
+  } catch {
+    return [];
   }
 }

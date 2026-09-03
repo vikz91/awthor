@@ -2,13 +2,16 @@ import "server-only";
 
 import type { ClientSession, Collection, Db } from "mongodb";
 import {
+  type PublishedSeriesStory,
   type PublishedStory,
   publicIdSchema,
   publishedStorySchema,
+  toPublishedSeriesStory,
 } from "./published-story-snapshot";
 
 export {
   buildPublishedStory,
+  type PublishedSeriesStory,
   type PublishedStory,
   type PublishedStorySummary,
   publicIdSchema,
@@ -31,6 +34,10 @@ export async function ensurePublishedStoryIndexes(database: Db) {
     { bookId: 1, userId: 1 },
     { name: "published_story_owner_book", unique: true },
   );
+  await collection(database).createIndex(
+    { userId: 1, "book.seriesName": 1, "book.seriesPosition": 1 },
+    { name: "published_story_series" },
+  );
 }
 
 export async function getPublishedStoryByPublicId(database: Db, publicId: string) {
@@ -42,6 +49,27 @@ export async function getPublishedStoryByPublicId(database: Db, publicId: string
 export async function getPublishedStoryForBook(database: Db, userId: string, bookId: string) {
   const story = await collection(database).findOne({ userId, bookId });
   return story ? publishedStorySchema.parse(story) : null;
+}
+
+export async function listPublishedStoriesInSeries(
+  database: Db,
+  story: Pick<PublishedStory, "publicId" | "userId" | "book">,
+): Promise<PublishedSeriesStory[]> {
+  const seriesName = story.book.seriesName.trim();
+  if (!story.book.isPartOfSeries || !seriesName) return [];
+
+  const stories = await collection(database)
+    .find({
+      userId: story.userId,
+      publicId: { $ne: story.publicId },
+      "book.isPartOfSeries": true,
+      "book.seriesName": seriesName,
+    })
+    .sort({ "book.seriesPosition": 1, publishedAt: 1 })
+    .limit(24)
+    .toArray();
+
+  return stories.map((item) => toPublishedSeriesStory(publishedStorySchema.parse(item)));
 }
 
 export async function savePublishedStory(database: Db, story: PublishedStory) {

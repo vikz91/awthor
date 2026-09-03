@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createSeedRepositoryData } from "@/lib/repository";
-import { buildPublishedStory, toPublishedStorySummary } from "./published-story-snapshot";
+import {
+  buildPublishedStory,
+  toPublishedSeriesStory,
+  toPublishedStorySummary,
+} from "./published-story-snapshot";
 
 describe("published story snapshots", () => {
   test("preserves a stable public ID and sorts a Markdown chapter snapshot", () => {
@@ -48,5 +52,33 @@ describe("published story snapshots", () => {
     });
 
     expect(story.authorEmail).toBe("");
+  });
+
+  test("makes a compact series link without exposing manuscript content", () => {
+    const data = createSeedRepositoryData();
+    const sourceBook = data.books[0];
+    const story = buildPublishedStory({
+      authorEmail: "writer@example.com",
+      authorName: "Writer",
+      book: {
+        ...sourceBook,
+        isPartOfSeries: true,
+        seriesName: "The Lantern Cycle",
+        seriesPosition: 2,
+        subtitle: "A second volume",
+      },
+      chapters: data.chapters[sourceBook.id],
+      now: "2026-09-03T00:00:00.000Z",
+      publicId: "published-story-1234",
+      userId: "user_123",
+    });
+
+    expect(toPublishedSeriesStory(story)).toEqual({
+      coverUrl: sourceBook.coverUrl,
+      publicId: "published-story-1234",
+      seriesPosition: 2,
+      subtitle: "A second volume",
+      title: "The Missing Page",
+    });
   });
 });

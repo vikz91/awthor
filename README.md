@@ -223,7 +223,8 @@ collection. It does not expose the live private book. The public page shows the 
 book and series metadata, author name, and author email from the writer's local profile. It offers
 word count, an estimated reading time, the same chapter-position rail used by the private reader,
 seamless/page layouts, and full screen. Writers can republish at the stable link or turn public
-access off at any time.
+access off at any time. When other books from that same writer and series are published, the page
+also links to them at the end of the story.
 
 #### Remote MCP setup
 
