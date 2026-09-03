@@ -138,6 +138,7 @@ describe("WebMCP data tools", () => {
     const result = asRecord(
       await execute(findTool(tools, "awthor_create_book"), {
         title: "The Quiet Archive",
+        genre: "Mystery, Romance",
         seriesName: "Archive Cycle",
       }),
     );
@@ -146,6 +147,7 @@ describe("WebMCP data tools", () => {
 
     expect(book.title).toBe("The Quiet Archive");
     expect(book.author).toBe("A. Writer");
+    expect(book.genre).toBe("Mystery, Romance");
     expect(book.seriesName).toBe("Archive Cycle");
     expect(chapter.number).toBe(1);
     expect(chapter).not.toHaveProperty("body");
@@ -154,6 +156,7 @@ describe("WebMCP data tools", () => {
 
     const data = await repository.getData();
     expect(data.books[0]?.isPartOfSeries).toBe(true);
+    expect(data.books[0]?.genre).toBe("Mystery, Romance");
     expect(data.books[0]?.seriesName).toBe("Archive Cycle");
   });
 
@@ -245,6 +248,7 @@ describe("WebMCP data tools", () => {
         expectedUpdatedAt: book.updatedAt,
         title: "Revised",
         author: "New Writer",
+        genre: "Thriller, Mystery",
         seriesName: "New Series",
         coverUrl: "https://example.com/cover.jpg",
       }),
@@ -252,6 +256,7 @@ describe("WebMCP data tools", () => {
     expect(asRecord(result.book)).toMatchObject({
       title: "Revised",
       author: "New Writer",
+      genre: "Thriller, Mystery",
       seriesName: "New Series",
       coverUrl: "https://example.com/cover.jpg",
     });

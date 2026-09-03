@@ -1,6 +1,6 @@
 {
   "name": "awthor-web",
-  "version": "0.1.2",
+  "version": "0.1.2100",
   "private": true,
   "license": "AGPL-3.0-only",
   "engines": {
@@ -14,6 +14,7 @@
     "lint:staged": "lint-staged",
     "format": "biome format --write",
     "test": "bun test",
+    "release": "bash ./scripts/release-tag.sh",
     "prepare": "husky"
   },
   "dependencies": {

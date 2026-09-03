@@ -1,6 +1,7 @@
 import { BookOpenText } from "lucide-react";
 import Image from "next/image";
-import { generatedCoverVariant, sanitizeRemoteImageUrl } from "@/lib/markdown";
+import { isGeneratedBookCoverDataUrl, sanitizeBookCoverUrl } from "@/lib/book-cover-generator";
+import { generatedCoverVariant } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
 
 type BookCoverProps = {
@@ -83,7 +84,8 @@ function GeneratedCover({ bookId, title }: Pick<BookCoverProps, "bookId" | "titl
 }
 
 export function BookCover({ bookId, title, author, coverUrl, className }: BookCoverProps) {
-  const safeCoverUrl = sanitizeRemoteImageUrl(coverUrl);
+  const safeCoverUrl = sanitizeBookCoverUrl(coverUrl);
+  const generatedImage = isGeneratedBookCoverDataUrl(safeCoverUrl);
   const displayAuthor = author?.trim() || "Awthor";
 
   return (
@@ -103,14 +105,16 @@ export function BookCover({ bookId, title, author, coverUrl, className }: BookCo
       ) : (
         <GeneratedCover bookId={bookId} title={title} />
       )}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-cover-overlay px-4 pt-8 pb-4 text-cover-foreground sm:px-5 sm:pt-10 sm:pb-5">
-        <p className="line-clamp-3 font-heading text-lg leading-[1.02] font-semibold tracking-[-0.035em] sm:text-xl">
-          {title}
-        </p>
-        <p className="mt-2 line-clamp-1 text-[0.62rem] font-semibold tracking-[0.18em] uppercase opacity-85 sm:text-[0.68rem]">
-          {displayAuthor}
-        </p>
-      </div>
+      {!generatedImage && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-cover-overlay px-4 pt-8 pb-4 text-cover-foreground sm:px-5 sm:pt-10 sm:pb-5">
+          <p className="line-clamp-3 font-heading text-lg leading-[1.02] font-semibold tracking-[-0.035em] sm:text-xl">
+            {title}
+          </p>
+          <p className="mt-2 line-clamp-1 text-[0.62rem] font-semibold tracking-[0.18em] uppercase opacity-85 sm:text-[0.68rem]">
+            {displayAuthor}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

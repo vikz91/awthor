@@ -29,6 +29,7 @@ type BookFloatingToolbarProps = {
   documentLayout: DocumentLayout;
   draft: string;
   inspectorOpen: boolean;
+  menuOpen: boolean;
   mode: WorkspaceMode;
   activeTool: WorkspaceTool;
   onActiveToolChange: (tool: WorkspaceTool) => void;
@@ -51,6 +52,7 @@ export function BookFloatingToolbar({
   documentLayout,
   draft,
   inspectorOpen,
+  menuOpen,
   mode,
   onActiveToolChange,
   onApplyDraft,
@@ -232,7 +234,7 @@ export function BookFloatingToolbar({
           inspectorOpen ? "min-[72rem]:right-[var(--workspace-inspector-width)]" : undefined
         }
         collapsedLabel="Tools"
-        heldOpen={activeTool !== null || openingTool !== null}
+        heldOpen={activeTool !== null || openingTool !== null || menuOpen}
         items={items}
         label="Book tools"
       />

@@ -90,8 +90,11 @@ function createService(): RemoteWorkspaceService & { calls: string[] } {
   return {
     calls,
     async createBook(input) {
-      calls.push(`createBook:${input.title}`);
-      return { book: { ...book, title: input.title }, initialChapter: chapter };
+      calls.push(`createBook:${input.title}:${input.genre ?? ""}`);
+      return {
+        book: { ...book, genre: input.genre ?? "", title: input.title },
+        initialChapter: chapter,
+      };
     },
     async createChapter() {
       calls.push("createChapter");
@@ -259,8 +262,12 @@ describe("remote MCP tool registry", () => {
       "awthor.publish",
     ]);
 
-    await client.callTool({ arguments: { title: "New story" }, name: "awthor_create_book" });
-    expect(service.calls).toEqual(["createBook:New story"]);
+    const created = await client.callTool({
+      arguments: { genre: "Mystery, Romance", title: "New story" },
+      name: "awthor_create_book",
+    });
+    expect(JSON.stringify(created)).toContain("Mystery, Romance");
+    expect(service.calls).toEqual(["createBook:New story:Mystery, Romance"]);
 
     const published = await client.callTool({
       arguments: { bookId: "book-1" },

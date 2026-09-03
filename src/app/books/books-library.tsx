@@ -12,6 +12,7 @@ import {
   Search,
   Settings2,
   Trash2,
+  UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -25,6 +26,14 @@ import { SyncControl } from "@/components/sync-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -32,6 +41,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { parseGenreCsv } from "@/lib/genres";
 import { calculateReadingProgress, type ReadingProgress } from "@/lib/reading-progress";
 import {
   type AppSettings,
@@ -74,12 +85,25 @@ function formatUpdatedAt(value: string): string {
 export function BooksLibraryFallback() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-backdrop-filter:bg-background/75 lg:hidden">
+        <div className="flex h-16 items-center justify-between gap-3 px-3">
+          <div className="h-10 w-28 animate-pulse rounded-xl bg-muted" />
+          <div className="flex gap-1.5">
+            <div className="h-11 w-24 animate-pulse rounded-2xl bg-muted" />
+            <div className="h-11 w-20 animate-pulse rounded-2xl bg-muted" />
+          </div>
+        </div>
+        <div className="px-3 pb-3">
+          <div className="h-11 w-full animate-pulse rounded-2xl bg-muted" />
+        </div>
+      </header>
       <AppTopBar
+        className="hidden lg:block"
         center={<div className="h-8 w-full max-w-md animate-pulse rounded-2xl bg-muted" />}
         left={<div className="h-9 w-28 animate-pulse rounded-xl bg-muted" />}
         right={<div className="h-8 w-24 animate-pulse rounded-xl bg-muted" />}
       />
-      <main className="mx-auto w-full max-w-[92rem] px-5 pt-28 pb-16 sm:px-8">
+      <main className="mx-auto w-full max-w-[92rem] px-5 pt-[calc(9rem+env(safe-area-inset-top))] pb-16 sm:px-8 lg:pt-28">
         <div className="h-10 w-48 animate-pulse rounded-xl bg-muted" />
         <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {["first", "second", "third", "fourth", "fifth"].map((key) => (
@@ -103,6 +127,7 @@ export function BooksLibrary() {
   >({});
   const [query, setQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [bookDialogOpen, setBookDialogOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [deletingBook, setDeletingBook] = useState<Book | null>(null);
@@ -249,7 +274,16 @@ export function BooksLibrary() {
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors">
+      <LibraryMobileHeader
+        onNewBook={openNewBook}
+        onOpenChange={setMobileMenuOpen}
+        onOpenSettings={() => updateSettingsQuery(true)}
+        onQueryChange={setQuery}
+        open={mobileMenuOpen}
+        query={query}
+      />
       <AppTopBar
+        className="hidden lg:block"
         left={
           <Link
             aria-label="Awthor home"
@@ -313,7 +347,7 @@ export function BooksLibrary() {
         }
       />
 
-      <main className="mx-auto w-full max-w-[92rem] px-5 pt-28 pb-16 sm:px-8 lg:px-10">
+      <main className="mx-auto w-full max-w-[92rem] px-5 pt-[calc(9rem+env(safe-area-inset-top))] pb-16 sm:px-8 lg:px-10 lg:pt-28">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
@@ -408,6 +442,165 @@ export function BooksLibrary() {
   );
 }
 
+type LibraryMobileHeaderFrameProps = {
+  onNewBook: () => void;
+  onOpenMore: () => void;
+  onQueryChange: (value: string) => void;
+  query: string;
+};
+
+export function LibraryMobileHeaderFrame({
+  onNewBook,
+  onOpenMore,
+  onQueryChange,
+  query,
+}: LibraryMobileHeaderFrameProps) {
+  return (
+    <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-backdrop-filter:bg-background/75 lg:hidden">
+      <div className="flex h-16 items-center justify-between gap-3 px-3">
+        <Link aria-label="Awthor home" className="flex min-w-0 items-center gap-2.5" href="/">
+          <BrandMark size={32} />
+          <span className="flex min-w-0 flex-col leading-none">
+            <span className="font-heading text-sm font-semibold">awthor</span>
+            <span className="mt-1 text-[11px] text-muted-foreground">Books</span>
+          </span>
+        </Link>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button aria-label="New book" className="h-11 px-3 text-xs" onClick={onNewBook} size="lg">
+            <Plus aria-hidden="true" />
+            New book
+          </Button>
+          <Button
+            aria-label="More library actions"
+            className="h-11 px-3 text-xs"
+            onClick={onOpenMore}
+            size="lg"
+            variant="ghost"
+          >
+            <MoreHorizontal aria-hidden="true" />
+            More
+          </Button>
+        </div>
+      </div>
+      <div className="px-3 pb-3">
+        <div className="relative">
+          <Search
+            aria-hidden="true"
+            className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <label className="sr-only" htmlFor="book-search-mobile">
+            Search books by title or author
+          </label>
+          <Input
+            className="h-11 bg-input/40 pr-3 pl-10"
+            id="book-search-mobile"
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Search books…"
+            type="search"
+            value={query}
+          />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function LibraryMobileHeader({
+  onNewBook,
+  onOpenChange,
+  onOpenSettings,
+  onQueryChange,
+  open,
+  query,
+}: Omit<LibraryMobileHeaderFrameProps, "onOpenMore"> & {
+  onOpenChange: (open: boolean) => void;
+  onOpenSettings: () => void;
+  open: boolean;
+}) {
+  function openSettings() {
+    onOpenChange(false);
+    onOpenSettings();
+  }
+
+  return (
+    <>
+      <LibraryMobileHeaderFrame
+        onNewBook={onNewBook}
+        onOpenMore={() => onOpenChange(true)}
+        onQueryChange={onQueryChange}
+        query={query}
+      />
+      <Drawer onOpenChange={onOpenChange} open={open}>
+        <DrawerContent className="w-[min(22rem,calc(100%-0.75rem))] lg:hidden">
+          <DrawerHeader>
+            <DrawerTitle>Library menu</DrawerTitle>
+            <DrawerDescription>Sync, account, and app settings.</DrawerDescription>
+          </DrawerHeader>
+          <DrawerBody className="space-y-4 px-3 py-4">
+            <SyncControl variant="settings" />
+
+            <section
+              aria-labelledby="mobile-account-heading"
+              className="rounded-2xl border border-border bg-muted/30 p-3"
+            >
+              <div className="flex min-h-11 items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <UserRound aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-medium" id="mobile-account-heading">
+                      Account
+                    </h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Profile and sign-in</p>
+                  </div>
+                </div>
+                <AccountMenu />
+              </div>
+            </section>
+
+            <nav aria-label="Library utilities" className="space-y-1">
+              <Button
+                className="h-auto min-h-14 w-full justify-start gap-3 px-3 py-2 text-left whitespace-normal"
+                onClick={openSettings}
+                size="lg"
+                variant="ghost"
+              >
+                <Settings2 aria-hidden="true" className="size-5" />
+                <span>
+                  <span className="block">Settings</span>
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                    Author profile, appearance, and preferences
+                  </span>
+                </span>
+              </Button>
+              <Button
+                className="h-auto min-h-14 w-full justify-start gap-3 px-3 py-2 text-left whitespace-normal"
+                nativeButton={false}
+                onClick={() => onOpenChange(false)}
+                render={<Link href="/test" />}
+                size="lg"
+                variant="ghost"
+              >
+                <Database aria-hidden="true" className="size-5" />
+                <span>
+                  <span className="block">System</span>
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                    Storage and workspace diagnostics
+                  </span>
+                </span>
+              </Button>
+            </nav>
+
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-muted-foreground">
+              <HardDrive aria-hidden="true" className="size-4" />
+              Books are stored on this device
+            </div>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+    </>
+  );
+}
+
 function BookCard({
   book,
   onDelete,
@@ -426,6 +619,7 @@ function BookCard({
       : progress.remainingMinutes === 0
         ? "Finished"
         : `${progress.remainingMinutes} min left`;
+  const genreLabel = parseGenreCsv(book.genre).join(", ");
 
   return (
     <article className="group min-w-0">
@@ -479,10 +673,32 @@ function BookCard({
           {book.title}
         </Link>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">{book.author}</p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {numberFormatter.format(book.wordCount)} words · {book.chapterCount}{" "}
-          {book.chapterCount === 1 ? "chapter" : "chapters"}
-        </p>
+        <div className="mt-2 flex min-w-0 items-center text-xs whitespace-nowrap text-muted-foreground">
+          <span className="shrink-0">
+            {numberFormatter.format(book.wordCount)} words · {book.chapterCount}{" "}
+            {book.chapterCount === 1 ? "chapter" : "chapters"}
+          </span>
+          {genreLabel && (
+            <>
+              <span aria-hidden="true" className="shrink-0">
+                {" · "}
+              </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    aria-label={`Genres: ${genreLabel}`}
+                    closeOnClick={false}
+                    delay={0}
+                    className="min-w-0 cursor-help truncate rounded-sm border-0 bg-transparent p-0 text-left text-inherit hover:underline hover:decoration-dotted hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {genreLabel}
+                  </TooltipTrigger>
+                  <TooltipContent>{genreLabel}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </>
+          )}
+        </div>
         <div className="mt-3" title={`${progress.percent}% read · ${readingLabel}`}>
           <div
             aria-label={`${progress.percent}% of ${book.title} read`}

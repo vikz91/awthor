@@ -30,6 +30,7 @@ export type FloatingToolbarItem = {
 };
 
 type RevealToolsDetail = {
+  focus?: boolean;
   itemId?: string;
 };
 
@@ -49,6 +50,7 @@ type FloatingToolbarProps = {
 const desktopRevealDistance = 96;
 const revealIntentDelay = 140;
 const hideDelay = 900;
+const upwardScrollRevealDistance = 12;
 
 export function FloatingToolbar({
   accessory,
@@ -58,7 +60,7 @@ export function FloatingToolbar({
   collapsedIcon = "PanelBottomOpen",
   collapsedLabel = "Tools",
   heldOpen = false,
-  initialVisibleMs = 3000,
+  initialVisibleMs = 4000,
   items,
   label,
 }: FloatingToolbarProps) {
@@ -72,10 +74,12 @@ export function FloatingToolbar({
   const focusOnRevealRef = useRef(false);
   const handleRef = useRef<HTMLButtonElement>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const itemsRef = useRef(items);
   const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPointerInsideRef = useRef(false);
+  const scrollPositionsRef = useRef(
+    new WeakMap<EventTarget, { position: number; upwardDistance: number }>(),
+  );
   const heldOpenRef = useRef(heldOpen);
   heldOpenRef.current = heldOpen;
   itemsRef.current = items;
@@ -112,24 +116,32 @@ export function FloatingToolbar({
   }, [clearHideTimeout]);
 
   const scheduleHide = useCallback(() => {
-    if (!autoHide || isCoarsePointer || heldOpenRef.current || hideTimeoutRef.current) {
+    if (!autoHide || heldOpenRef.current || hideTimeoutRef.current) {
       return;
     }
 
-    hideTimeoutRef.current = setTimeout(() => {
-      hideTimeoutRef.current = null;
+    hideTimeoutRef.current = setTimeout(
+      () => {
+        hideTimeoutRef.current = null;
 
-      if (
-        isPointerInsideRef.current ||
-        heldOpenRef.current ||
-        (document.activeElement && contentRef.current?.contains(document.activeElement))
-      ) {
-        return;
-      }
+        if (
+          isPointerInsideRef.current ||
+          heldOpenRef.current ||
+          (document.activeElement && contentRef.current?.contains(document.activeElement))
+        ) {
+          return;
+        }
 
-      setIsVisible(false);
-    }, hideDelay);
-  }, [autoHide, isCoarsePointer]);
+        setIsVisible(false);
+      },
+      isCoarsePointer ? initialVisibleMs : hideDelay,
+    );
+  }, [autoHide, initialVisibleMs, isCoarsePointer]);
+
+  const revealTemporarily = useCallback(() => {
+    showToolbar();
+    scheduleHide();
+  }, [scheduleHide, showToolbar]);
 
   const revealAndFocus = useCallback(
     (itemId?: string) => {
@@ -166,52 +178,77 @@ export function FloatingToolbar({
   }, []);
 
   useEffect(() => {
-    if (!autoHide) {
-      return;
-    }
-
-    initialTimeoutRef.current = setTimeout(() => {
-      initialTimeoutRef.current = null;
-      if (
-        !heldOpenRef.current &&
-        !isPointerInsideRef.current &&
-        !(document.activeElement && contentRef.current?.contains(document.activeElement))
-      ) {
-        setIsVisible(false);
-      }
-    }, initialVisibleMs);
-
-    return () => {
-      if (initialTimeoutRef.current) {
-        clearTimeout(initialTimeoutRef.current);
-      }
-    };
-  }, [autoHide, initialVisibleMs]);
-
-  useEffect(() => {
-    if (isCoarsePointer && !heldOpen) {
-      setIsVisible(false);
-    } else if (heldOpen) {
+    if (heldOpen) {
       showToolbar();
     } else {
+      clearHideTimeout();
       scheduleHide();
     }
-  }, [heldOpen, isCoarsePointer, scheduleHide, showToolbar]);
+  }, [clearHideTimeout, heldOpen, scheduleHide, showToolbar]);
 
   useEffect(() => {
-    if (!isCoarsePointer || !isVisible || heldOpen) {
+    if (!autoHide || !isCoarsePointer) {
       return;
     }
 
-    function handleOutsidePointerDown(event: PointerEvent) {
-      if (!contentRef.current?.contains(event.target as Node)) {
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Element | null;
+      const isEditorTarget = Boolean(target?.closest("input, textarea, [contenteditable='true']"));
+      if (isEditorTarget && !contentRef.current?.contains(target) && !heldOpenRef.current) {
+        clearHideTimeout();
         setIsVisible(false);
+        return;
+      }
+
+      const isToolbarTarget = Boolean(
+        contentRef.current?.contains(target) || handleRef.current?.contains(target),
+      );
+      const touchesTopBar = Boolean(target?.closest("[data-app-top-bar]"));
+
+      if (touchesTopBar) {
+        revealTemporarily();
+      } else if (isVisible && !isToolbarTarget && !heldOpenRef.current) {
+        clearHideTimeout();
+        scheduleHide();
       }
     }
 
-    document.addEventListener("pointerdown", handleOutsidePointerDown);
-    return () => document.removeEventListener("pointerdown", handleOutsidePointerDown);
-  }, [heldOpen, isCoarsePointer, isVisible]);
+    function handleScroll(event: Event) {
+      const target = event.target;
+      if (!target) {
+        return;
+      }
+
+      const currentPosition = scrollPosition(target);
+      if (currentPosition === null) {
+        return;
+      }
+
+      const previous = scrollPositionsRef.current.get(target) ?? {
+        position: currentPosition,
+        upwardDistance: 0,
+      };
+      const upwardDistance =
+        previous.position > currentPosition
+          ? previous.upwardDistance + previous.position - currentPosition
+          : 0;
+      const shouldReveal = upwardDistance >= upwardScrollRevealDistance;
+      scrollPositionsRef.current.set(target, {
+        position: currentPosition,
+        upwardDistance: shouldReveal ? 0 : upwardDistance,
+      });
+      if (shouldReveal) {
+        revealTemporarily();
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, { passive: true });
+    document.addEventListener("scroll", handleScroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [autoHide, clearHideTimeout, isCoarsePointer, isVisible, revealTemporarily, scheduleHide]);
 
   useEffect(() => {
     if (items[activeIndex]?.disabled) {
@@ -261,6 +298,11 @@ export function FloatingToolbar({
     }
 
     function handleRevealTools(event: CustomEvent<RevealToolsDetail>) {
+      if (event.detail?.focus === false) {
+        revealTemporarily();
+        return;
+      }
+
       revealAndFocus(event.detail?.itemId);
     }
 
@@ -283,6 +325,7 @@ export function FloatingToolbar({
     clearRevealTimeout,
     isCoarsePointer,
     revealAndFocus,
+    revealTemporarily,
     scheduleHide,
     scheduleReveal,
   ]);
@@ -371,15 +414,22 @@ export function FloatingToolbar({
         className,
       )}
     >
-      {accessory ? (
+      {accessory && isVisible ? (
         <div className="pointer-events-none mb-2 animate-in fade-in slide-in-from-bottom-1 duration-150 motion-reduce:animate-none">
           {accessory}
         </div>
       ) : null}
-      {isVisible ? (
+      <div className="grid w-full min-w-0 max-w-full place-items-center">
         <fieldset
           aria-label={`${label} controls`}
-          className="flex max-w-full min-w-0 flex-col items-center border-0 p-0 animate-in fade-in slide-in-from-bottom-2 duration-150 motion-reduce:animate-none"
+          aria-hidden={!isVisible}
+          className={cn(
+            "col-start-1 row-start-1 flex max-w-full min-w-0 flex-col items-center border-0 p-0 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
+            isVisible
+              ? "pointer-events-auto translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-3 opacity-0",
+          )}
+          inert={!isVisible}
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) {
               scheduleHide();
@@ -424,31 +474,41 @@ export function FloatingToolbar({
             </div>
           </div>
         </fieldset>
-      ) : (
         <button
           aria-controls={toolbarId}
-          aria-expanded="false"
+          aria-expanded={isVisible}
+          aria-hidden={isVisible || undefined}
           aria-keyshortcuts="Alt+T"
           className={cn(
-            "pointer-events-auto inline-flex h-8 animate-in items-center justify-center gap-1.5 rounded-full border border-border/80 bg-popover/95 px-3 text-xs font-semibold text-popover-foreground shadow-lg shadow-foreground/10 fade-in zoom-in-95 backdrop-blur-xl duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:animate-none",
+            "col-start-1 row-start-1 inline-flex h-8 self-end items-center justify-center gap-1.5 rounded-full border border-border/80 bg-popover/95 px-3 text-xs font-semibold text-popover-foreground shadow-lg shadow-foreground/10 backdrop-blur-xl transition-[opacity,transform] duration-200 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+            isVisible
+              ? "pointer-events-none translate-y-2 opacity-0"
+              : "pointer-events-auto translate-y-0 opacity-100",
+            isCoarsePointer && "h-11 w-24 px-0",
           )}
           data-toolbar-handle
-          onClick={showToolbar}
+          inert={isVisible}
+          onClick={() => revealAndFocus()}
           ref={handleRef}
+          tabIndex={isVisible ? -1 : 0}
           title={`${collapsedLabel} (Alt/Option+T)`}
           type="button"
         >
-          <span aria-hidden="true" className="grid place-items-center">
-            <MotionIcon animation="nudge" name={collapsedIcon} size={16} trigger="hover" />
-          </span>
-          <span>{collapsedLabel}</span>
+          {isCoarsePointer ? (
+            <span aria-hidden="true" className="h-1 w-8 rounded-full bg-muted-foreground/55" />
+          ) : (
+            <span aria-hidden="true" className="grid place-items-center">
+              <MotionIcon animation="nudge" name={collapsedIcon} size={16} trigger="hover" />
+            </span>
+          )}
+          <span className={cn(isCoarsePointer && "sr-only")}>{collapsedLabel}</span>
           {!isCoarsePointer ? (
             <kbd className="hidden rounded-sm border border-border bg-muted px-1 py-0.5 font-sans text-[0.6rem] leading-none text-muted-foreground sm:inline">
               ⌥T
             </kbd>
           ) : null}
         </button>
-      )}
+      </div>
       <p aria-live="polite" className="sr-only">
         {announcement}
       </p>
@@ -537,6 +597,14 @@ function ToolbarItem({
 function firstEnabledIndex(items: readonly FloatingToolbarItem[]) {
   const index = items.findIndex((item) => !item.disabled);
   return index < 0 ? 0 : index;
+}
+
+function scrollPosition(target: EventTarget): number | null {
+  if (target === document || target === document.documentElement || target === document.body) {
+    return window.scrollY;
+  }
+
+  return target instanceof HTMLElement ? target.scrollTop : null;
 }
 
 function enabledControls(container: HTMLElement | null): HTMLElement[] {

@@ -1,10 +1,7 @@
 import { type ZodType, z } from "zod";
-import {
-  countManuscript,
-  getLeadingMarkdownTitle,
-  sanitizeRemoteImageUrl,
-  withLeadingMarkdownTitle,
-} from "../markdown";
+import { sanitizeBookCoverUrl } from "@/lib/book-cover-generator";
+import { normalizeGenreCsv } from "@/lib/genres";
+import { countManuscript, getLeadingMarkdownTitle, withLeadingMarkdownTitle } from "../markdown";
 import {
   type AwthorBackupV2,
   type AwthorRepository,
@@ -557,7 +554,8 @@ class LocalAwthorRepository implements AwthorRepository {
           slug: slugify(input.title),
           title: input.title.trim() || "Untitled book",
           author: input.author.trim(),
-          coverUrl: sanitizeRemoteImageUrl(input.coverUrl),
+          coverUrl: sanitizeBookCoverUrl(input.coverUrl),
+          genre: normalizeGenreCsv(input.genre ?? ""),
           isPartOfSeries: seriesName.length > 0,
           seriesName,
           createdAt: now,
@@ -589,14 +587,16 @@ class LocalAwthorRepository implements AwthorRepository {
       const title =
         input.title === undefined ? current.title : input.title.trim() || "Untitled book";
       const author = input.author === undefined ? current.author : input.author.trim();
+      const genre = input.genre === undefined ? current.genre : normalizeGenreCsv(input.genre);
       const seriesName =
         input.seriesName === undefined ? current.seriesName : input.seriesName.trim();
       const updated = bookSchema.parse({
         ...current,
         title,
         author,
+        genre,
         coverUrl:
-          input.coverUrl === undefined ? current.coverUrl : sanitizeRemoteImageUrl(input.coverUrl),
+          input.coverUrl === undefined ? current.coverUrl : sanitizeBookCoverUrl(input.coverUrl),
         seriesName,
         isPartOfSeries: seriesName.length > 0,
         updatedAt: new Date().toISOString(),

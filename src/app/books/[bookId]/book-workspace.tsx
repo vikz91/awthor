@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  Ellipsis,
   LoaderCircle,
   Maximize2,
   PenLine,
@@ -21,6 +22,7 @@ import {
   type ChangeEvent,
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -32,6 +34,13 @@ import { SettingsInspector } from "@/components/settings-dialog";
 import { AccountMenu } from "@/components/sync-account-action";
 import { SyncControl } from "@/components/sync-control";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { BookExportSnapshot } from "@/lib/book-export";
 import {
   formatMarkdownSelection,
@@ -106,6 +115,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const [dirtyTool, setDirtyTool] = useState<Exclude<WorkspaceTool, null> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chapterChooserOpen, setChapterChooserOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectionToolbar, setSelectionToolbar] = useState<SelectionToolbarState | null>(null);
   const [focusModeState, setFocusModeState] = useState<FocusModeState>("off");
   const [proofreadingPreferences, setProofreadingPreferences] = useState<BookProofreadingSettings>(
@@ -129,6 +139,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const fullscreenVerificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inspectorPositionRef = useRef<number | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const caretByChapterRef = useRef(new Map<string, { start: number; end: number }>());
   const focusEditorAfterModeChangeRef = useRef(false);
@@ -872,7 +883,12 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       preserveInspectorPosition();
       setSettingsOpen(false);
       closeOverlayQuery("settings");
-      requestAnimationFrame(() => settingsButtonRef.current?.focus({ preventScroll: true }));
+      requestAnimationFrame(() => {
+        const settingsTrigger = window.matchMedia("(min-width: 64rem)").matches
+          ? settingsButtonRef.current
+          : mobileSettingsButtonRef.current;
+        settingsTrigger?.focus({ preventScroll: true });
+      });
     },
     [closeOverlayQuery, confirmToolTransition, flushCurrentDraft, preserveInspectorPosition],
   );
@@ -1537,6 +1553,14 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     router.push("/books");
   }
 
+  function revealBookTools() {
+    window.dispatchEvent(
+      new CustomEvent("awthor:reveal-tools", {
+        detail: { focus: false },
+      }),
+    );
+  }
+
   function changeDraft(event: ChangeEvent<HTMLTextAreaElement>) {
     const markdown = event.target.value;
     setSelectionToolbar(null);
@@ -1701,137 +1725,264 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       ref={workspaceRootRef}
     >
       {!focusMode ? (
-        <AppTopBar
-          center={
-            <div className="flex items-center gap-1">
-              <Button
-                aria-label="Previous chapter"
-                disabled={!previousChapter}
-                onClick={() => previousChapter && void selectChapter(previousChapter.id)}
-                size="icon-sm"
-                title="Previous chapter"
-                variant="ghost"
-              >
-                <ChevronLeft aria-hidden="true" />
-              </Button>
-              <Button
-                aria-label="Choose chapter"
-                className="max-w-[12rem] px-2 sm:max-w-[20rem]"
-                onClick={() => void handleChooserOpenChange(true)}
-                size="sm"
-                variant="ghost"
-              >
-                <span className="truncate">
-                  <span className="hidden sm:inline">{chapterLabel} · </span>
-                  {currentChapter?.title ?? "Chapters"}
-                </span>
-                <ChevronDown aria-hidden="true" />
-              </Button>
-              <Button
-                aria-label="Next chapter"
-                disabled={!nextChapter}
-                onClick={() => nextChapter && void selectChapter(nextChapter.id)}
-                size="icon-sm"
-                title="Next chapter"
-                variant="ghost"
-              >
-                <ChevronRight aria-hidden="true" />
-              </Button>
-            </div>
-          }
-          left={
-            <div className="flex min-w-0 items-center gap-1 sm:gap-3">
-              <Button
-                aria-label="Back to all books"
-                onClick={() => void navigateBack()}
-                size="icon-sm"
-                title="Back to all books"
-                variant="ghost"
-              >
-                <ArrowLeft aria-hidden="true" />
-              </Button>
-              <span className="hidden max-w-48 truncate text-sm font-medium lg:block">
-                {book.title}
-              </span>
-            </div>
-          }
-          right={
-            <div className="flex items-center gap-1.5">
-              <SaveIndicator
-                error={saveError}
-                onRetry={() => void flushCurrentDraft()}
-                state={saveState}
-              />
-              <SyncControl variant="navbar" />
-              <AccountMenu />
-              <div className="flex items-center rounded-xl border border-border bg-muted/40 p-0.5">
+        <>
+          <header
+            className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-backdrop-filter:bg-background/75 lg:hidden"
+            onPointerDown={revealBookTools}
+          >
+            <div className="mx-auto w-full max-w-[96rem] px-2">
+              <div className="grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center">
+                <div className="flex justify-start">
+                  <Button
+                    aria-label="Back to all books"
+                    className="size-11 rounded-xl"
+                    onClick={() => void navigateBack()}
+                    title="Back to all books"
+                    variant="ghost"
+                  >
+                    <ArrowLeft aria-hidden="true" />
+                  </Button>
+                </div>
                 <Button
-                  aria-keyshortcuts="Alt+R"
-                  aria-pressed={mode === "read"}
-                  className={cn(
-                    "h-7 rounded-lg px-2",
-                    mode === "read" && "bg-background shadow-sm",
-                  )}
-                  onClick={() => void switchMode("read")}
-                  size="sm"
-                  title="Read (Alt/Option+R)"
+                  aria-label="Choose chapter"
+                  className="min-w-0 max-w-full justify-center gap-1 rounded-xl px-2"
+                  onClick={() => void handleChooserOpenChange(true)}
                   variant="ghost"
                 >
-                  <BookOpen aria-hidden="true" />
-                  <span className="hidden xl:inline">Read</span>
+                  <span className="truncate">{currentChapter?.title ?? "Chapters"}</span>
+                  <ChevronDown aria-hidden="true" className="size-3.5" />
+                </Button>
+                <div className="flex items-center justify-end">
+                  <div className="grid size-11 place-items-center">
+                    {saveState === "error" ? (
+                      <SaveIndicator
+                        error={saveError}
+                        onRetry={() => void flushCurrentDraft()}
+                        state={saveState}
+                      />
+                    ) : (
+                      <SyncControl variant="navbar" />
+                    )}
+                  </div>
+                  <Button
+                    aria-label="More book actions"
+                    aria-expanded={mobileMenuOpen}
+                    className="size-11 rounded-xl"
+                    onClick={() => setMobileMenuOpen(true)}
+                    title="More book actions"
+                    variant="ghost"
+                  >
+                    <Ellipsis aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+              <div className="grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-t border-border/60">
+                <div className="flex justify-end pr-2">
+                  <Button
+                    aria-label="Previous chapter"
+                    className="size-11 rounded-xl"
+                    disabled={!previousChapter}
+                    onClick={() => previousChapter && void selectChapter(previousChapter.id)}
+                    title="Previous chapter"
+                    variant="ghost"
+                  >
+                    <ChevronLeft aria-hidden="true" />
+                  </Button>
+                </div>
+                <div className="flex items-center rounded-2xl border border-border bg-muted/40 p-0.5">
+                  <Button
+                    aria-keyshortcuts="Alt+R"
+                    aria-pressed={mode === "read"}
+                    className={cn(
+                      "h-10 rounded-xl px-3",
+                      mode === "read" && "bg-background shadow-sm",
+                    )}
+                    onClick={() => void switchMode("read")}
+                    title="Read (Alt/Option+R)"
+                    variant="ghost"
+                  >
+                    <BookOpen aria-hidden="true" />
+                    <span>Read</span>
+                  </Button>
+                  <Button
+                    aria-keyshortcuts="Alt+W"
+                    aria-pressed={mode === "write"}
+                    className={cn(
+                      "h-10 rounded-xl px-3",
+                      mode === "write" && "bg-background shadow-sm",
+                    )}
+                    onClick={() => void switchMode("write", true)}
+                    title="Write (Alt/Option+W)"
+                    variant="ghost"
+                  >
+                    <PenLine aria-hidden="true" />
+                    <span>Write</span>
+                  </Button>
+                </div>
+                <div className="flex justify-start pl-2">
+                  <Button
+                    aria-label="Next chapter"
+                    className="size-11 rounded-xl"
+                    disabled={!nextChapter}
+                    onClick={() => nextChapter && void selectChapter(nextChapter.id)}
+                    title="Next chapter"
+                    variant="ghost"
+                  >
+                    <ChevronRight aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <AppTopBar
+            className="hidden lg:block"
+            center={
+              <div className="flex items-center gap-1">
+                <Button
+                  aria-label="Previous chapter"
+                  disabled={!previousChapter}
+                  onClick={() => previousChapter && void selectChapter(previousChapter.id)}
+                  size="icon-sm"
+                  title="Previous chapter"
+                  variant="ghost"
+                >
+                  <ChevronLeft aria-hidden="true" />
                 </Button>
                 <Button
-                  aria-keyshortcuts="Alt+W"
-                  aria-pressed={mode === "write"}
-                  className={cn(
-                    "h-7 rounded-lg px-2",
-                    mode === "write" && "bg-background shadow-sm",
-                  )}
-                  onClick={() => void switchMode("write", true)}
+                  aria-label="Choose chapter"
+                  className="max-w-[12rem] px-2 sm:max-w-[20rem]"
+                  onClick={() => void handleChooserOpenChange(true)}
                   size="sm"
-                  title="Write (Alt/Option+W)"
                   variant="ghost"
                 >
-                  <PenLine aria-hidden="true" />
-                  <span className="hidden xl:inline">Write</span>
+                  <span className="truncate">
+                    <span className="hidden sm:inline">{chapterLabel} · </span>
+                    {currentChapter?.title ?? "Chapters"}
+                  </span>
+                  <ChevronDown aria-hidden="true" />
+                </Button>
+                <Button
+                  aria-label="Next chapter"
+                  disabled={!nextChapter}
+                  onClick={() => nextChapter && void selectChapter(nextChapter.id)}
+                  size="icon-sm"
+                  title="Next chapter"
+                  variant="ghost"
+                >
+                  <ChevronRight aria-hidden="true" />
                 </Button>
               </div>
-              <BookPublish bookId={book.id} />
-              <BookExport snapshot={exportSnapshot} />
-              <Button
-                aria-label="Open system"
-                nativeButton={false}
-                render={<Link href="/test" />}
-                size="icon-sm"
-                title="System"
-                variant="ghost"
-              >
-                <Database aria-hidden="true" />
-              </Button>
-              <Button
-                aria-label="Enter focus mode"
-                disabled={!currentChapter}
-                onClick={enterFocusMode}
-                size="icon-sm"
-                title="Enter focus mode"
-                variant="ghost"
-              >
-                <Maximize2 aria-hidden="true" />
-              </Button>
-              <Button
-                aria-label="Author and app settings"
-                aria-pressed={settingsOpen}
-                onClick={() => void handleSettingsOpenChange(true)}
-                ref={settingsButtonRef}
-                size="icon-sm"
-                title="Settings"
-                variant="ghost"
-              >
-                <Settings2 aria-hidden="true" />
-              </Button>
-            </div>
-          }
-        />
+            }
+            left={
+              <div className="flex min-w-0 items-center gap-1 sm:gap-3">
+                <Button
+                  aria-label="Back to all books"
+                  onClick={() => void navigateBack()}
+                  size="icon-sm"
+                  title="Back to all books"
+                  variant="ghost"
+                >
+                  <ArrowLeft aria-hidden="true" />
+                </Button>
+                <span className="hidden max-w-48 truncate text-sm font-medium lg:block">
+                  {book.title}
+                </span>
+              </div>
+            }
+            right={
+              <div className="flex items-center gap-1.5">
+                <SaveIndicator
+                  error={saveError}
+                  onRetry={() => void flushCurrentDraft()}
+                  state={saveState}
+                />
+                <SyncControl variant="navbar" />
+                <AccountMenu />
+                <div className="flex items-center rounded-xl border border-border bg-muted/40 p-0.5">
+                  <Button
+                    aria-keyshortcuts="Alt+R"
+                    aria-pressed={mode === "read"}
+                    className={cn(
+                      "h-7 rounded-lg px-2",
+                      mode === "read" && "bg-background shadow-sm",
+                    )}
+                    onClick={() => void switchMode("read")}
+                    size="sm"
+                    title="Read (Alt/Option+R)"
+                    variant="ghost"
+                  >
+                    <BookOpen aria-hidden="true" />
+                    <span className="hidden xl:inline">Read</span>
+                  </Button>
+                  <Button
+                    aria-keyshortcuts="Alt+W"
+                    aria-pressed={mode === "write"}
+                    className={cn(
+                      "h-7 rounded-lg px-2",
+                      mode === "write" && "bg-background shadow-sm",
+                    )}
+                    onClick={() => void switchMode("write", true)}
+                    size="sm"
+                    title="Write (Alt/Option+W)"
+                    variant="ghost"
+                  >
+                    <PenLine aria-hidden="true" />
+                    <span className="hidden xl:inline">Write</span>
+                  </Button>
+                </div>
+                <BookPublish bookId={book.id} />
+                <BookExport snapshot={exportSnapshot} />
+                <Button
+                  aria-label="Open system"
+                  nativeButton={false}
+                  render={<Link href="/test" />}
+                  size="icon-sm"
+                  title="System"
+                  variant="ghost"
+                >
+                  <Database aria-hidden="true" />
+                </Button>
+                <Button
+                  aria-label="Enter focus mode"
+                  disabled={!currentChapter}
+                  onClick={enterFocusMode}
+                  size="icon-sm"
+                  title="Enter focus mode"
+                  variant="ghost"
+                >
+                  <Maximize2 aria-hidden="true" />
+                </Button>
+                <Button
+                  aria-label="Author and app settings"
+                  aria-pressed={settingsOpen}
+                  onClick={() => void handleSettingsOpenChange(true)}
+                  ref={settingsButtonRef}
+                  size="icon-sm"
+                  title="Settings"
+                  variant="ghost"
+                >
+                  <Settings2 aria-hidden="true" />
+                </Button>
+              </div>
+            }
+          />
+
+          <MobileWorkspaceMenu
+            bookId={book.id}
+            currentChapter={currentChapter}
+            onEnterFocusMode={enterFocusMode}
+            onOpenChange={setMobileMenuOpen}
+            onOpenSettings={() => {
+              setMobileMenuOpen(false);
+              void handleSettingsOpenChange(true);
+            }}
+            open={mobileMenuOpen}
+            settingsOpen={settingsOpen}
+            settingsTriggerRef={mobileSettingsButtonRef}
+            snapshot={exportSnapshot}
+          />
+        </>
       ) : null}
 
       <main
@@ -1839,7 +1990,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           "mx-auto w-full px-5 sm:px-8 lg:px-12",
           focusMode
             ? "h-dvh min-h-0 max-w-none overflow-y-auto overscroll-contain pt-12 pb-32 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:pt-16"
-            : "min-h-screen max-w-[72rem] pt-28 pb-40 sm:pt-32",
+            : "min-h-screen max-w-[72rem] pt-[calc(9rem+env(safe-area-inset-top))] pb-40 lg:pt-32",
           inspectorOpen &&
             "min-[72rem]:mr-[var(--workspace-inspector-width)] min-[72rem]:ml-auto min-[72rem]:max-w-[min(72rem,calc(100%-var(--workspace-inspector-width)))]",
         )}
@@ -1908,26 +2059,28 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
               <nav
                 aria-label="Chapter navigation"
                 className={cn(
-                  "mt-20 flex items-center justify-between gap-4 border-t border-border pt-6",
+                  "mt-20 grid grid-cols-2 items-center gap-3 border-t border-border pt-6",
                   documentLayout === "pages" && "mx-auto max-w-[51rem]",
                 )}
               >
                 <Button
+                  className="min-w-0 justify-start px-2 sm:px-3"
                   disabled={!previousChapter}
                   onClick={() => previousChapter && void selectChapter(previousChapter.id)}
                   variant="ghost"
                 >
                   <ChevronLeft aria-hidden="true" data-icon="inline-start" />
-                  <span className="max-w-40 truncate">
+                  <span className="min-w-0 truncate">
                     {previousChapter?.title ?? "Previous chapter"}
                   </span>
                 </Button>
                 <Button
+                  className="min-w-0 justify-end px-2 sm:px-3"
                   disabled={!nextChapter}
                   onClick={() => nextChapter && void selectChapter(nextChapter.id)}
                   variant="ghost"
                 >
-                  <span className="max-w-40 truncate">{nextChapter?.title ?? "Next chapter"}</span>
+                  <span className="min-w-0 truncate">{nextChapter?.title ?? "Next chapter"}</span>
                   <ChevronRight aria-hidden="true" data-icon="inline-end" />
                 </Button>
               </nav>
@@ -1964,6 +2117,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           documentLayout={documentLayout}
           draft={draft}
           inspectorOpen={inspectorOpen}
+          menuOpen={mobileMenuOpen || chapterChooserOpen || settingsOpen}
           mode={mode}
           onActiveToolChange={(tool: WorkspaceTool) => void handleToolChange(tool)}
           onApplyDraft={applyToolDraft}
@@ -2018,6 +2172,158 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
             ? "Manuscript saved locally."
             : ""}
       </p>
+    </div>
+  );
+}
+
+function MobileWorkspaceMenu({
+  bookId,
+  currentChapter,
+  onEnterFocusMode,
+  onOpenChange,
+  onOpenSettings,
+  open,
+  settingsOpen,
+  settingsTriggerRef,
+  snapshot,
+}: {
+  bookId: string;
+  currentChapter: Chapter | null;
+  onEnterFocusMode: () => void;
+  onOpenChange: (open: boolean) => void;
+  onOpenSettings: () => void;
+  open: boolean;
+  settingsOpen: boolean;
+  settingsTriggerRef: { current: HTMLButtonElement | null };
+  snapshot: BookExportSnapshot;
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="top-auto right-0 bottom-0 left-0 max-h-[min(82dvh,44rem)] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-y-auto rounded-t-3xl rounded-b-none p-0 pb-[max(1rem,env(safe-area-inset-bottom))] duration-150 data-open:slide-in-from-bottom-4 data-closed:slide-out-to-bottom-4 motion-reduce:duration-0 lg:hidden">
+        <DialogHeader className="border-b border-border px-5 py-4 pr-14">
+          <DialogTitle className="text-lg">Book actions</DialogTitle>
+          <DialogDescription>Sync, share, and adjust this writing workspace.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 p-3">
+          <section aria-labelledby="mobile-cloud-actions">
+            <h2
+              className="px-3 pb-1.5 text-xs font-medium text-muted-foreground"
+              id="mobile-cloud-actions"
+            >
+              Cloud and sharing
+            </h2>
+            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+              <MobileMenuControl
+                description="Back up the latest changes to your account"
+                label="Sync"
+              >
+                <SyncControl mobileVisibility="persistent" variant="navbar" />
+              </MobileMenuControl>
+              <MobileMenuControl description="Create or update a public story page" label="Publish">
+                <BookPublish bookId={bookId} />
+              </MobileMenuControl>
+              <MobileMenuControl
+                description="Download PDF or EPUB, or copy Markdown"
+                label="Export"
+              >
+                <BookExport snapshot={snapshot} />
+              </MobileMenuControl>
+              <div className="hidden min-h-16 items-center gap-3 border-t border-border/60 px-4 has-[button]:flex">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Account</p>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Manage your signed-in profile
+                  </p>
+                </div>
+                <div className="grid size-11 place-items-center [&_button]:size-11">
+                  <AccountMenu />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section aria-labelledby="mobile-workspace-actions">
+            <h2
+              className="px-3 pb-1.5 text-xs font-medium text-muted-foreground"
+              id="mobile-workspace-actions"
+            >
+              Workspace
+            </h2>
+            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+              <Button
+                className="h-auto min-h-16 w-full justify-start rounded-none border-b border-border/60 px-4 text-left whitespace-normal"
+                disabled={!currentChapter}
+                onClick={() => {
+                  onOpenChange(false);
+                  onEnterFocusMode();
+                }}
+                variant="ghost"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">Focus mode</span>
+                  <span className="block text-xs leading-5 font-normal text-muted-foreground">
+                    Hide the workspace chrome for immersive reading or writing
+                  </span>
+                </span>
+                <Maximize2 aria-hidden="true" />
+              </Button>
+              <Button
+                aria-pressed={settingsOpen}
+                className="h-auto min-h-16 w-full justify-start rounded-none border-b border-border/60 px-4 text-left whitespace-normal"
+                onClick={onOpenSettings}
+                ref={settingsTriggerRef}
+                variant="ghost"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">Settings</span>
+                  <span className="block text-xs leading-5 font-normal text-muted-foreground">
+                    Author profile, proofreading, and app preferences
+                  </span>
+                </span>
+                <Settings2 aria-hidden="true" />
+              </Button>
+              <Button
+                className="h-auto min-h-16 w-full justify-start rounded-none px-4 text-left whitespace-normal"
+                nativeButton={false}
+                onClick={() => onOpenChange(false)}
+                render={<Link href="/test" />}
+                variant="ghost"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">System</span>
+                  <span className="block text-xs leading-5 font-normal text-muted-foreground">
+                    Storage status, backups, and diagnostics
+                  </span>
+                </span>
+                <Database aria-hidden="true" />
+              </Button>
+            </div>
+          </section>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MobileMenuControl({
+  children,
+  description,
+  label,
+}: {
+  children: ReactNode;
+  description: string;
+  label: string;
+}) {
+  return (
+    <div className="flex min-h-16 items-center gap-3 border-b border-border/60 px-4 last:border-b-0">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <div className="grid size-11 shrink-0 place-items-center [&_[data-slot=button]]:size-11 [&_[data-slot=button]]:rounded-xl [&_[data-slot=dropdown-menu-trigger]]:size-11 [&_[data-slot=dropdown-menu-trigger]]:rounded-xl">
+        {children}
+      </div>
     </div>
   );
 }

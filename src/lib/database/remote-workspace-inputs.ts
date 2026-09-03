@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { normalizeGenreCsv } from "@/lib/genres";
 import { countManuscript, getLeadingMarkdownTitle } from "@/lib/markdown";
 import { bookSchema, chapterSchema, createDefaultChapterArc } from "@/lib/repository";
 
@@ -33,6 +34,7 @@ export const remoteUpdateCharacterSchema = z.object(remoteCharacterFields).stric
 export const remoteCreateBookSchema = z.object({
   author: z.string().trim().max(200).default(""),
   coverUrl: remoteUrlSchema.nullable().optional(),
+  genre: z.string().trim().max(200).optional(),
   seriesName: z.string().trim().max(200).optional(),
   title: titleSchema,
 });
@@ -88,6 +90,7 @@ export function createRemoteBookWithInitialChapter(input: unknown) {
     characterCountWithSpaces: 0,
     coverUrl: parsed.coverUrl ?? null,
     createdAt: now,
+    genre: normalizeGenreCsv(parsed.genre ?? ""),
     id: randomUUID(),
     isPartOfSeries: Boolean(parsed.seriesName),
     pageCount: 0,

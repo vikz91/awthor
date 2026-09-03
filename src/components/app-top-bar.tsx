@@ -15,6 +15,7 @@ export function AppTopBar({ left, center, right, className }: AppTopBarProps) {
         "fixed inset-x-0 top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl supports-backdrop-filter:bg-background/75",
         className,
       )}
+      data-app-top-bar
     >
       <div className="mx-auto grid h-16 w-full max-w-[96rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 sm:gap-5 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center">{left}</div>

@@ -10,11 +10,13 @@ describe("remote workspace input and defaults", () => {
   test("creates a book with one empty initial Markdown chapter", () => {
     const { book, initialChapter } = createRemoteBookWithInitialChapter({
       author: "A. Writer",
+      genre: "  Mystery, Romance, mystery  ",
       seriesName: "Stories",
       title: "A new story",
     });
 
     expect(book.chapterCount).toBe(1);
+    expect(book.genre).toBe("Mystery, Romance");
     expect(book.isPartOfSeries).toBe(true);
     expect(initialChapter.number).toBe(1);
     expect(initialChapter.body).toBe("");

@@ -83,6 +83,7 @@ export type RemoteWorkspaceService = {
   createBook(input: {
     author?: string;
     coverUrl?: string | null;
+    genre?: string;
     seriesName?: string | null;
     title: string;
   }): Promise<{ book: Book; initialChapter: Chapter }>;
@@ -91,6 +92,7 @@ export type RemoteWorkspaceService = {
     input: {
       author?: string;
       coverUrl?: string | null;
+      genre?: string;
       seriesName?: string | null;
       title?: string;
     },
@@ -284,6 +286,12 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
         .object({
           author: author.optional(),
           coverUrl: optionalHttpUrl,
+          genre: z
+            .string()
+            .trim()
+            .max(200)
+            .describe("Comma-separated genres, for example: Mystery, Romance")
+            .optional(),
           seriesName: z.string().trim().max(200).nullable().optional(),
           title,
         })
@@ -302,12 +310,19 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     "awthor_update_book",
     {
       title: "Update synced book metadata",
-      description: "Update the title, author, series name, or remote cover URL for a synced book.",
+      description:
+        "Update the title, author, genre, series name, or remote cover URL for a synced book.",
       inputSchema: z
         .object({
           author: author.optional(),
           bookId: identifier,
           coverUrl: optionalHttpUrl,
+          genre: z
+            .string()
+            .trim()
+            .max(200)
+            .describe("Comma-separated genres, for example: Mystery, Romance")
+            .optional(),
           seriesName: z.string().trim().max(200).nullable().optional(),
           title: title.optional(),
         })
@@ -587,6 +602,7 @@ function summarizeBook(book: Book) {
     author: book.author,
     chapterCount: book.chapterCount,
     coverUrl: book.coverUrl,
+    genre: book.genre,
     id: book.id,
     seriesName: book.seriesName,
     title: book.title,
@@ -624,12 +640,14 @@ function summarizeData(data: RepositoryData) {
 function hasBookUpdate(input: {
   author?: string;
   coverUrl?: string | null;
+  genre?: string;
   seriesName?: string | null;
   title?: string;
 }) {
   return (
     input.author !== undefined ||
     input.coverUrl !== undefined ||
+    input.genre !== undefined ||
     input.seriesName !== undefined ||
     input.title !== undefined
   );

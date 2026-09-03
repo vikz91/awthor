@@ -157,7 +157,12 @@ describe("local repository v2", () => {
   test("creates a book and chapter, persists Markdown, and repairs aggregates", async () => {
     const storage = new MemoryStorage();
     const repository = createLocalAwthorRepository(() => storage);
-    const book = await repository.createBook({ title: "North Star", author: "A. Writer" });
+    const book = await repository.createBook({
+      title: "North Star",
+      author: "A. Writer",
+      genre: "  Mystery, Romance, mystery  ",
+    });
+    expect(book.genre).toBe("Mystery, Romance");
     const chapters = await repository.chapters.list(book.id);
     expect(chapters).toHaveLength(1);
     expect(chapters?.[0]).toMatchObject({ title: "Chapter 1", body: "# Chapter 1\n" });
@@ -176,9 +181,17 @@ describe("local repository v2", () => {
     });
     expect(renamed.body).toBe("# A Better Hello\n\nTwo worlds meet.");
 
+    const updatedBook = await repository.updateBook(book.id, {
+      genre: ' Speculative fiction, "Crime, noir" ',
+    });
+    expect(updatedBook.genre).toBe('Speculative fiction, "Crime, noir"');
+
     const backup = await repository.exportBackup();
     expect(backup.version).toBe(2);
-    expect(backup.data.books[0].id).toBe(book.id);
+    expect(backup.data.books[0]).toMatchObject({
+      id: book.id,
+      genre: 'Speculative fiction, "Crime, noir"',
+    });
   });
 
   test("persists the user's default dialect and lets books override it", async () => {

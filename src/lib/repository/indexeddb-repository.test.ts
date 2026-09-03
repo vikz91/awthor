@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { indexedDB } from "fake-indexeddb";
+import { generatedBookCoverDataUrlPrefix } from "@/lib/book-cover-generator";
 import {
   createIndexedDbAwthorRepository,
   type IndexedDbAwthorRepositoryOptions,
@@ -214,7 +215,13 @@ describe("IndexedDB repository v3", () => {
     const options = repositoryOptions(storage);
     const repository = createIndexedDbAwthorRepository(options);
     await repository.initialize();
-    const book = await repository.createBook({ title: "Separate Chapters", author: "A. Writer" });
+    const book = await repository.createBook({
+      title: "Separate Chapters",
+      author: "A. Writer",
+      genre: "  Historical fiction, Romance  ",
+    });
+    expect(book.genre).toBe("Historical fiction, Romance");
+    await repository.updateBook(book.id, { genre: " Literary fiction, Mystery " });
     const firstChapter = (await repository.chapters.list(book.id))?.[0];
     if (!firstChapter) {
       throw new Error("Expected the initial chapter.");
@@ -246,6 +253,7 @@ describe("IndexedDB repository v3", () => {
 
     const reloaded = createIndexedDbAwthorRepository(options);
     await reloaded.initialize();
+    expect((await reloaded.books.get())?.[0]?.genre).toBe("Literary fiction, Mystery");
     const chapters = await reloaded.chapters.list(book.id);
     expect(chapters).toHaveLength(2);
     expect(chapters?.map((chapter) => chapter.body)).toEqual([
@@ -312,6 +320,25 @@ describe("IndexedDB repository v3", () => {
       characters: 0,
       bookSettings: 1,
     });
+  });
+
+  test("stores generated cover data in the IndexedDB book record", async () => {
+    const storage = new MemoryStorage();
+    const options = repositoryOptions(storage);
+    const coverUrl = `${generatedBookCoverDataUrlPrefix}AQIDBA==`;
+    const repository = createIndexedDbAwthorRepository(options);
+    await repository.initialize();
+    const created = await repository.createBook({
+      title: "The Missing Page",
+      author: "Mira Sen",
+      coverUrl,
+    });
+
+    const reopened = createIndexedDbAwthorRepository(options);
+    await reopened.initialize();
+
+    expect(created.coverUrl).toBe(coverUrl);
+    expect((await reopened.books.get())?.[0]?.coverUrl).toBe(coverUrl);
   });
 
   test("keeps v2 data intact when migration fails and can retry", async () => {

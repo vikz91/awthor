@@ -8,6 +8,12 @@ const maxManuscriptCharacters = 2_000_000;
 const identifierSchema = z.string().trim().min(1).max(128);
 const titleSchema = z.string().trim().min(1).max(200);
 const authorSchema = z.string().trim().min(1).max(200);
+const optionalGenreSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .describe("Comma-separated genres, for example: Mystery, Romance")
+  .optional();
 const optionalSeriesSchema = z.string().trim().max(200).nullable().optional();
 const optionalCoverUrlSchema = z
   .union([
@@ -25,6 +31,7 @@ const optionalCoverUrlSchema = z
 const createBookInputSchema = z.strictObject({
   title: titleSchema,
   author: authorSchema.optional(),
+  genre: optionalGenreSchema,
   seriesName: optionalSeriesSchema,
   coverUrl: optionalCoverUrlSchema,
 });
@@ -50,13 +57,15 @@ const updateBookInputSchema = z
     expectedUpdatedAt: z.string().trim().min(1).optional(),
     title: titleSchema.optional(),
     author: authorSchema.optional(),
+    genre: optionalGenreSchema,
     seriesName: optionalSeriesSchema,
     coverUrl: optionalCoverUrlSchema,
   })
   .refine(
-    ({ author, coverUrl, seriesName, title }) =>
+    ({ author, coverUrl, genre, seriesName, title }) =>
       author !== undefined ||
       coverUrl !== undefined ||
+      genre !== undefined ||
       seriesName !== undefined ||
       title !== undefined,
     { message: "Provide at least one book field to update." },
@@ -118,6 +127,7 @@ type BookSummary = {
   id: string;
   title: string;
   author: string;
+  genre: string;
   seriesName: string;
   coverUrl: string | null;
   chapterCount: number;
@@ -261,6 +271,7 @@ export function createDataSiteTools({
         const book = await repository.createBook({
           title: input.title,
           author,
+          genre: input.genre,
           seriesName: input.seriesName ?? "",
           coverUrl: input.coverUrl,
         });
@@ -304,7 +315,7 @@ export function createDataSiteTools({
       name: "awthor_update_book",
       title: "Update Awthor book metadata",
       description:
-        "Update the title, author, series, or cover URL of a local Awthor book. Supply expectedUpdatedAt to reject stale changes.",
+        "Update the title, author, genre, series, or cover URL of a local Awthor book. Supply expectedUpdatedAt to reject stale changes.",
       inputSchema: updateBookInputJsonSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: true },
       execute: async (rawInput, options) => {
@@ -319,6 +330,7 @@ export function createDataSiteTools({
         const book = await repository.updateBook(input.bookId, {
           title: input.title,
           author: input.author,
+          genre: input.genre,
           seriesName: input.seriesName === null ? "" : input.seriesName,
           coverUrl: input.coverUrl,
         });
@@ -482,6 +494,7 @@ function summarizeBook(book: Book): BookSummary {
     id: book.id,
     title: book.title,
     author: book.author,
+    genre: book.genre,
     seriesName: book.seriesName,
     coverUrl: book.coverUrl,
     chapterCount: book.chapterCount,
@@ -556,6 +569,11 @@ const createBookInputJsonSchema = {
   properties: {
     title: { type: "string", minLength: 1, maxLength: 200 },
     author: { type: "string", minLength: 1, maxLength: 200 },
+    genre: {
+      type: "string",
+      maxLength: 200,
+      description: "Comma-separated genres, for example: Mystery, Romance",
+    },
     seriesName: { type: ["string", "null"], maxLength: 200 },
     coverUrl: {
       type: ["string", "null"],
@@ -604,6 +622,11 @@ const updateBookInputJsonSchema = {
     expectedUpdatedAt: { type: "string", minLength: 1 },
     title: { type: "string", minLength: 1, maxLength: 200 },
     author: { type: "string", minLength: 1, maxLength: 200 },
+    genre: {
+      type: "string",
+      maxLength: 200,
+      description: "Comma-separated genres, for example: Mystery, Romance",
+    },
     seriesName: { type: ["string", "null"], maxLength: 200 },
     coverUrl: {
       type: ["string", "null"],
@@ -615,6 +638,7 @@ const updateBookInputJsonSchema = {
   anyOf: [
     { required: ["title"] },
     { required: ["author"] },
+    { required: ["genre"] },
     { required: ["seriesName"] },
     { required: ["coverUrl"] },
   ],

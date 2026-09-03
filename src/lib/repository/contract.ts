@@ -58,6 +58,8 @@ export type CreateBookInput = {
   title: string;
   author: string;
   coverUrl?: string | null;
+  /** A CSV-formatted list; legacy single-genre values remain valid. */
+  genre?: string;
   seriesName?: string;
 };
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { SignInButton } from "@clerk/nextjs";
-import { CloudOff, CloudUpload, LoaderCircle, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { Check, CloudOff, CloudUpload, LoaderCircle, TriangleAlert } from "lucide-react";
+import { useEffect, useReducer, useState } from "react";
 import { useSync } from "@/components/sync-provider";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -13,19 +13,85 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { SyncStatus } from "@/lib/sync/types";
 import { cn } from "@/lib/utils";
 
-type SyncControlProps = { variant: "navbar" | "settings" };
+type SyncControlProps = {
+  mobileVisibility?: "contextual" | "persistent";
+  variant: "navbar" | "settings";
+};
+
+export const navbarSyncSuccessDurationMs = 1_000;
+
+export type NavbarSyncFeedbackState = {
+  hasPendingLocalChanges: boolean;
+  showSuccess: boolean;
+  wasSyncing: boolean;
+};
+
+export type NavbarSyncFeedbackAction =
+  | { type: "local-change" }
+  | { type: "status-change"; status: SyncStatus }
+  | { type: "success-expired" };
+
+export const initialNavbarSyncFeedback: NavbarSyncFeedbackState = {
+  hasPendingLocalChanges: false,
+  showSuccess: false,
+  wasSyncing: false,
+};
+
+export function reduceNavbarSyncFeedback(
+  state: NavbarSyncFeedbackState,
+  action: NavbarSyncFeedbackAction,
+): NavbarSyncFeedbackState {
+  if (action.type === "local-change") {
+    return { ...state, hasPendingLocalChanges: true, showSuccess: false };
+  }
+  if (action.type === "success-expired") {
+    return { ...state, showSuccess: false };
+  }
+  if (action.status === "syncing") {
+    return { ...state, showSuccess: false, wasSyncing: true };
+  }
+  if (action.status === "idle" && state.wasSyncing) {
+    return { hasPendingLocalChanges: false, showSuccess: true, wasSyncing: false };
+  }
+  return { ...state, showSuccess: false, wasSyncing: false };
+}
+
+export function shouldShowNavbarSyncOnMobile({
+  feedback,
+  hasPersistentFailure = false,
+  lastSuccessfulSyncAt,
+  status,
+}: {
+  feedback: NavbarSyncFeedbackState;
+  hasPersistentFailure?: boolean;
+  lastSuccessfulSyncAt: string | null;
+  status: SyncStatus;
+}) {
+  return (
+    status !== "idle" ||
+    hasPersistentFailure ||
+    feedback.hasPendingLocalChanges ||
+    feedback.showSuccess ||
+    lastSuccessfulSyncAt === null
+  );
+}
 
 function formatLastSync(value: string | null) {
   if (!value) return "Not synced yet";
   return `Last synced ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))}`;
 }
 
-export function SyncControl({ variant }: SyncControlProps) {
+export function SyncControl({ mobileVisibility = "contextual", variant }: SyncControlProps) {
   const { access, configured, lastSuccessfulSyncAt, signedIn, status, syncNow } = useSync();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [navbarFeedback, dispatchNavbarFeedback] = useReducer(
+    reduceNavbarSyncFeedback,
+    initialNavbarSyncFeedback,
+  );
   const label = variant === "settings" ? "Sync now" : "Sync";
   const description =
     signedIn && access === "unauthorized"
@@ -47,6 +113,47 @@ export function SyncControl({ variant }: SyncControlProps) {
         : status === "error"
           ? TriangleAlert
           : CloudUpload;
+  const hasPersistentNavbarFailure = Boolean(error) || (signedIn && access === "unauthorized");
+  const NavbarIcon = hasPersistentNavbarFailure
+    ? TriangleAlert
+    : navbarFeedback.showSuccess
+      ? Check
+      : Icon;
+  const navbarDescription =
+    error ?? (!hasPersistentNavbarFailure && navbarFeedback.showSuccess ? "Synced" : description);
+  const showNavbarOnMobile =
+    mobileVisibility === "persistent" ||
+    shouldShowNavbarSyncOnMobile({
+      feedback: navbarFeedback,
+      hasPersistentFailure: hasPersistentNavbarFailure,
+      lastSuccessfulSyncAt,
+      status,
+    });
+
+  useEffect(() => {
+    if (variant !== "navbar") return;
+    const onLocalChange = () => dispatchNavbarFeedback({ type: "local-change" });
+    window.addEventListener("awthor:repository-mutated", onLocalChange);
+    window.addEventListener("awthor:repository-deleted", onLocalChange);
+    return () => {
+      window.removeEventListener("awthor:repository-mutated", onLocalChange);
+      window.removeEventListener("awthor:repository-deleted", onLocalChange);
+    };
+  }, [variant]);
+
+  useEffect(() => {
+    if (variant !== "navbar") return;
+    dispatchNavbarFeedback({ type: "status-change", status });
+  }, [status, variant]);
+
+  useEffect(() => {
+    if (variant !== "navbar" || !navbarFeedback.showSuccess) return;
+    const timer = window.setTimeout(
+      () => dispatchNavbarFeedback({ type: "success-expired" }),
+      navbarSyncSuccessDurationMs,
+    );
+    return () => window.clearTimeout(timer);
+  }, [navbarFeedback.showSuccess, variant]);
 
   async function handleSync() {
     if (!configured || !signedIn) {
@@ -99,16 +206,32 @@ export function SyncControl({ variant }: SyncControlProps) {
 
   return (
     <>
+      <span className="inline-flex size-11 shrink-0 items-center justify-center lg:hidden">
+        {showNavbarOnMobile && (
+          <Button
+            aria-label={`${label}. ${navbarDescription}`}
+            className="size-11"
+            disabled={status === "syncing" || (signedIn && access === "checking")}
+            onClick={() => void handleSync()}
+            size="icon-lg"
+            title={navbarDescription}
+            variant="ghost"
+          >
+            <NavbarIcon aria-hidden="true" className={cn(status === "syncing" && "animate-spin")} />
+          </Button>
+        )}
+      </span>
       <Button
-        aria-label={`${label}. ${description}`}
+        aria-label={`${label}. ${navbarDescription}`}
+        className="hidden lg:inline-flex"
         disabled={status === "syncing" || (signedIn && access === "checking")}
         onClick={() => void handleSync()}
         size="sm"
-        title={description}
+        title={navbarDescription}
         variant="ghost"
       >
-        <Icon aria-hidden="true" className={cn(status === "syncing" && "animate-spin")} />
-        <span className="hidden sm:inline">{label}</span>
+        <NavbarIcon aria-hidden="true" className={cn(status === "syncing" && "animate-spin")} />
+        <span>{label}</span>
       </Button>
       <SyncAccountDialog configured={configured} onOpenChange={setOpen} open={open} />
     </>

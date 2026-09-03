@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isGeneratedBookCoverDataUrl } from "@/lib/book-cover-generator";
 
 export const themes = ["paper", "stone"] as const;
 export const themeSchema = z.preprocess((value) => {
@@ -34,14 +35,27 @@ export type OnboardingDetails = z.infer<typeof onboardingDetailsSchema>;
 export const bookStatuses = ["Outline", "First draft", "Revision"] as const;
 export const bookStatusSchema = z.enum(bookStatuses);
 
-const nullableRemoteUrlSchema = z.preprocess(
+const nullableBookCoverUrlSchema = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? null : value),
   z
     .string()
-    .url()
-    .refine((value) => value.startsWith("https://") || value.startsWith("http://"), {
-      message: "Only HTTP(S) URLs are supported.",
-    })
+    .refine(
+      (value) => {
+        if (isGeneratedBookCoverDataUrl(value)) {
+          return true;
+        }
+
+        try {
+          const url = new URL(value);
+          return url.protocol === "https:" || url.protocol === "http:";
+        } catch {
+          return false;
+        }
+      },
+      {
+        message: "Only HTTP(S) URLs or generated book covers are supported.",
+      },
+    )
     .nullable(),
 );
 
@@ -50,7 +64,7 @@ export const bookSchema = z.object({
   slug: z.string().default(""),
   title: z.string().default("Untitled book"),
   author: z.string().default(""),
-  coverUrl: nullableRemoteUrlSchema.default(null),
+  coverUrl: nullableBookCoverUrlSchema.default(null),
   subtitle: z.string().default(""),
   status: bookStatusSchema.default("First draft"),
   genre: z.string().default(""),

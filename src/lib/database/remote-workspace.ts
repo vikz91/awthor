@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { ClientSession, Db } from "mongodb";
 import { z } from "zod";
+import { normalizeGenreCsv } from "@/lib/genres";
 import { countManuscript, getLeadingMarkdownTitle } from "@/lib/markdown";
 import {
   appSettingsSchema,
@@ -70,6 +71,7 @@ export const remoteUpdateCharacterSchema = z.object(remoteCharacterFields).stric
 export const remoteCreateBookSchema = z.object({
   author: z.string().trim().max(200).default(""),
   coverUrl: remoteUrlSchema.nullable().optional(),
+  genre: z.string().trim().max(200).optional(),
   seriesName: z.string().trim().max(200).optional(),
   title: titleSchema,
 });
@@ -146,6 +148,7 @@ function defaultBook(input: z.infer<typeof remoteCreateBookSchema>): Book {
     characterCountWithSpaces: 0,
     coverUrl: input.coverUrl ?? null,
     createdAt: timestamp,
+    genre: normalizeGenreCsv(input.genre ?? ""),
     id: randomUUID(),
     isPartOfSeries: Boolean(input.seriesName),
     pageCount: 0,
@@ -341,9 +344,11 @@ export class RemoteWorkspaceService {
     const workspace = await this.workspace();
     const book = this.requireBook(workspace, bookId);
     const patch = remoteUpdateBookSchema.parse(input);
+    const genre = patch.genre === undefined ? book.genre : normalizeGenreCsv(patch.genre);
     const updated = bookSchema.parse({
       ...book,
       ...patch,
+      genre,
       updatedAt: now(),
       isPartOfSeries:
         patch.seriesName === undefined ? book.isPartOfSeries : Boolean(patch.seriesName),
