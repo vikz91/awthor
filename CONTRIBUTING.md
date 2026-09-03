@@ -57,3 +57,19 @@ Use the issue forms. Bug reports need reproducible steps and environment details
 ## Security issues
 
 Do not open a public issue for a vulnerability. Follow [SECURITY.md](SECURITY.md).
+
+## Publishing a release
+
+Stable releases are automated from semantic-version tags. Update `package.json` to the intended
+version, commit and push the verified change to `main`, then tag that commit with the exact matching
+version and push the annotated tag:
+
+```bash
+git tag -a v0.1.1 -m "Awthor v0.1.1"
+git push origin v0.1.1
+```
+
+The release workflow checks the tag format and package version, installs frozen dependencies, runs
+lint, tests, the production build, and `git diff --check`, then publishes a GitHub Release with
+generated notes and the live Awthor URL. Ordinary pushes and merges to `main` continue to run CI
+and deploy through Vercel, but do not create a release or invent a version number.
