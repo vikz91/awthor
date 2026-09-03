@@ -449,9 +449,27 @@ function MarketingFooter() {
             optional sync.
           </p>
         </div>
-        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-muted-foreground">
+        <nav
+          aria-label="Explore Awthor"
+          className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-muted-foreground"
+        >
           <Link className="transition-colors hover:text-foreground" href="/">
             Home
+          </Link>
+          <Link
+            className="transition-colors hover:text-foreground"
+            href="/open-source-novel-writing-app"
+          >
+            Open-source writing app
+          </Link>
+          <Link
+            className="transition-colors hover:text-foreground"
+            href="/private-local-first-writing-app"
+          >
+            Private local-first writing
+          </Link>
+          <Link className="transition-colors hover:text-foreground" href="/scrivener-alternative">
+            Scrivener alternative
           </Link>
           <Link className="transition-colors hover:text-foreground" href="/books">
             Your library
@@ -465,7 +483,7 @@ function MarketingFooter() {
             Source code
             <ExternalLink aria-hidden="true" className="size-3" />
           </a>
-        </div>
+        </nav>
       </div>
     </footer>
   );

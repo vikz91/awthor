@@ -412,6 +412,12 @@ pull request, contributors confirm that they can share the content, will respond
 accept the project’s [Code of Conduct](CODE_OF_CONDUCT.md). Security vulnerabilities must be
 reported privately according to [SECURITY.md](SECURITY.md).
 
+## Support the project
+
+Awthor has no pricing tier and its core writing experience will remain free and open source. Read
+[FUNDING.md](FUNDING.md) to learn what future sponsorship will sustain, the project's funding
+principles, and other ways to help today.
+
 ## License
 
 Awthor is free and open-source software licensed under the
