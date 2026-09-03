@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Newsreader, Nunito_Sans, Outfit } from "next/font/google";
+import { Geist_Mono, Newsreader, Nunito_Sans, Outfit, Patrick_Hand } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
@@ -32,6 +32,12 @@ const newsreader = Newsreader({
   style: ["normal", "italic"],
   subsets: ["latin"],
   variable: "--font-newsreader",
+});
+
+const patrickHand = Patrick_Hand({
+  subsets: ["latin"],
+  variable: "--font-patrick-hand",
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -89,6 +95,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         outfitHeading.variable,
         geistMono.variable,
         newsreader.variable,
+        patrickHand.variable,
       )}
     >
       <head>

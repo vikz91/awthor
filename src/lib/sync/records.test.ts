@@ -29,6 +29,7 @@ describe("sync records", () => {
 
     expect(settings?.payload).toEqual({
       editor: data.settings.editor,
+      notebookModeByBook: data.settings.notebookModeByBook,
       proofreadingByBook: data.settings.proofreadingByBook,
     });
   });
@@ -235,6 +236,7 @@ describe("sync records", () => {
   test("cleans up all per-book settings when a remote book is deleted", async () => {
     const data = createSeedRepositoryData();
     const bookId = data.books[0].id;
+    data.settings.notebookModeByBook[bookId] = true;
     const result = applySyncRecords(data, createSyncDeviceState("device-a"), [
       {
         contentHash: "e".repeat(64),
@@ -249,6 +251,7 @@ describe("sync records", () => {
     ]);
 
     expect(result.data.settings.lastChapterByBook[bookId]).toBeUndefined();
+    expect(result.data.settings.notebookModeByBook[bookId]).toBeUndefined();
     expect(result.data.settings.readingPositionByBook[bookId]).toBeUndefined();
     expect(result.data.settings.proofreadingByBook[bookId]).toBeUndefined();
     expect(result.data.settings.activeBookId).toBe(result.data.books[0]?.id ?? null);

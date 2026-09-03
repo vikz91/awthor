@@ -75,6 +75,7 @@ function createService(): RemoteWorkspaceService & { calls: string[] } {
       spellcheck: true,
     },
     lastChapterByBook: {},
+    notebookModeByBook: {},
     proofreadingByBook: {},
     readingPositionByBook: {},
   };

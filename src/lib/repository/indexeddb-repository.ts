@@ -89,6 +89,7 @@ type RepositoryDeletedRecord = {
 type BookSettingsRecord = {
   bookId: string;
   lastChapterId: string | null;
+  notebookMode: boolean | null;
   readingPosition: number | null;
   proofreading: BookProofreadingSettings | null;
 };
@@ -98,6 +99,7 @@ const storedCharacterSchema = characterSchema.and(z.object({ bookId: z.string().
 const bookSettingsRecordSchema = z.object({
   bookId: z.string().min(1),
   lastChapterId: z.string().nullable(),
+  notebookMode: z.boolean().nullable().default(null),
   readingPosition: z.number().finite().min(0).max(1).nullable(),
   proofreading: bookProofreadingSettingsSchema.nullable(),
 });
@@ -373,6 +375,7 @@ function splitSettings(settings: RepositoryData["settings"]): {
   const parsed = appSettingsSchema.parse(settings);
   const bookIds = new Set([
     ...Object.keys(parsed.lastChapterByBook),
+    ...Object.keys(parsed.notebookModeByBook),
     ...Object.keys(parsed.readingPositionByBook),
     ...Object.keys(parsed.proofreadingByBook),
   ]);
@@ -383,6 +386,7 @@ function splitSettings(settings: RepositoryData["settings"]): {
       bookSettingsRecordSchema.parse({
         bookId,
         lastChapterId: parsed.lastChapterByBook[bookId] ?? null,
+        notebookMode: parsed.notebookModeByBook[bookId] ?? null,
         readingPosition: parsed.readingPositionByBook[bookId] ?? null,
         proofreading: parsed.proofreadingByBook[bookId] ?? null,
       }),
@@ -399,6 +403,9 @@ function mergeSettings(
     const parsed = bookSettingsRecordSchema.parse(record);
     if (parsed.lastChapterId !== null) {
       settings.lastChapterByBook[parsed.bookId] = parsed.lastChapterId;
+    }
+    if (parsed.notebookMode !== null) {
+      settings.notebookModeByBook[parsed.bookId] = parsed.notebookMode;
     }
     if (parsed.readingPosition !== null) {
       settings.readingPositionByBook[parsed.bookId] = parsed.readingPosition;
@@ -863,6 +870,7 @@ class IndexedDbAwthorRepository implements AwthorRepository {
         delete data.chapters[bookId];
         delete data.characters[bookId];
         delete data.settings.lastChapterByBook[bookId];
+        delete data.settings.notebookModeByBook[bookId];
         delete data.settings.readingPositionByBook[bookId];
         delete data.settings.proofreadingByBook[bookId];
         if (data.settings.activeBookId === bookId) {

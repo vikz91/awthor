@@ -11,6 +11,13 @@ describe("app settings", () => {
   test("preserves the pages preference", () => {
     expect(appSettingsSchema.parse({ editor: { layout: "pages" } }).editor.layout).toBe("pages");
   });
+
+  test("defaults notebook mode off and remembers it by book", () => {
+    expect(createDefaultAppSettings().notebookModeByBook).toEqual({});
+    expect(
+      appSettingsSchema.parse({ notebookModeByBook: { "book-1": true } }).notebookModeByBook,
+    ).toEqual({ "book-1": true });
+  });
 });
 
 function bookWithCover(coverUrl: string) {

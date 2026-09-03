@@ -126,6 +126,7 @@ export const appSettingsSchema = z.object({
   lastChapterByBook: z.record(z.string(), z.string()).default({}),
   readingPositionByBook: z.record(z.string(), z.number().finite().min(0).max(1)).default({}),
   proofreadingByBook: z.record(z.string(), bookProofreadingSettingsSchema).default({}),
+  notebookModeByBook: z.record(z.string(), z.boolean()).default({}),
   editor: z
     .object({
       layout: documentLayoutSchema.default("seamless"),

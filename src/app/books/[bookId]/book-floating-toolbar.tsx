@@ -30,6 +30,7 @@ type BookFloatingToolbarProps = {
   draft: string;
   inspectorOpen: boolean;
   menuOpen: boolean;
+  notebookMode: boolean;
   readingChromeVisible?: boolean;
   mode: WorkspaceMode;
   activeTool: WorkspaceTool;
@@ -38,6 +39,7 @@ type BookFloatingToolbarProps = {
   onRequestWrite: () => void;
   onChapterUpdated: (chapter: Chapter) => void;
   onDocumentLayoutChange: (layout: DocumentLayout) => Promise<void>;
+  onNotebookModeChange: (enabled: boolean) => Promise<void>;
   onReadingChromeVisibleChange?: (visible: boolean) => void;
   onBeforeToolOpen: () => Promise<void>;
   onProofreadingPreferencesChange: (preferences: BookProofreadingSettings) => Promise<void>;
@@ -55,6 +57,7 @@ export function BookFloatingToolbar({
   draft,
   inspectorOpen,
   menuOpen,
+  notebookMode,
   readingChromeVisible,
   mode,
   onActiveToolChange,
@@ -62,6 +65,7 @@ export function BookFloatingToolbar({
   onBeforeToolOpen,
   onChapterUpdated,
   onDocumentLayoutChange,
+  onNotebookModeChange,
   onReadingChromeVisibleChange,
   onProofreadingPreferencesChange,
   onRequestWrite,
@@ -72,6 +76,7 @@ export function BookFloatingToolbar({
   const [announcement, setAnnouncement] = useState("Book tools ready.");
   const [openingTool, setOpeningTool] = useState<WorkspaceTool>(null);
   const [savingLayout, setSavingLayout] = useState(false);
+  const [savingNotebookMode, setSavingNotebookMode] = useState(false);
   const [showCounts, setShowCounts] = useState(false);
   const previousToolRef = useRef<WorkspaceTool>(activeTool);
   const counts = useMemo(() => countManuscript(draft), [draft]);
@@ -152,6 +157,20 @@ export function BookFloatingToolbar({
     }
   }
 
+  async function toggleNotebookMode() {
+    const enabled = !notebookMode;
+    setSavingNotebookMode(true);
+    setAnnouncement(`${enabled ? "Turning on" : "Turning off"} notebook mode…`);
+    try {
+      await onNotebookModeChange(enabled);
+      setAnnouncement(`Notebook mode ${enabled ? "on" : "off"}.`);
+    } catch {
+      setAnnouncement("The notebook preference could not be saved on this device.");
+    } finally {
+      setSavingNotebookMode(false);
+    }
+  }
+
   const items: FloatingToolbarItem[] = [
     {
       id: "spelling",
@@ -212,6 +231,22 @@ export function BookFloatingToolbar({
           : "Preview print-like pages in Read",
     },
   ];
+
+  if (mode === "write") {
+    items.push({
+      id: "notebook",
+      label: notebookMode ? "Turn notebook mode off" : "Turn notebook mode on",
+      displayLabel: "Notebook",
+      icon: "NotebookPen",
+      onSelect: () => void toggleNotebookMode(),
+      pressed: notebookMode,
+      shortcut: "Alt+6",
+      disabled: savingNotebookMode,
+      tooltip: notebookMode
+        ? "Return to the classic writing surface"
+        : "Write with a handwriting font and ruled lines",
+    });
+  }
 
   return (
     <>

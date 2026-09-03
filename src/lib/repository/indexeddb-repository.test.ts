@@ -205,6 +205,7 @@ describe("IndexedDB repository v3", () => {
     }
     await localRepository.settings.save({
       ...settings,
+      notebookModeByBook: { ...settings.notebookModeByBook, [book.id]: true },
       readingPositionByBook: { ...settings.readingPositionByBook, [book.id]: 0.45 },
       proofreadingByBook: {
         ...settings.proofreadingByBook,
@@ -227,6 +228,7 @@ describe("IndexedDB repository v3", () => {
     });
     expect(data.characters[book.id]?.[0]?.name).toBe("Mira");
     expect(data.settings.readingPositionByBook[book.id]).toBe(0.45);
+    expect(data.settings.notebookModeByBook[book.id]).toBe(true);
     expect(data.settings.proofreadingByBook[book.id]).toEqual({
       dialect: "indian",
       words: ["pujo"],
@@ -329,6 +331,7 @@ describe("IndexedDB repository v3", () => {
     await repository.settings.save({
       ...settings,
       lastChapterByBook: { ...settings.lastChapterByBook, [book.id]: secondChapter.id },
+      notebookModeByBook: { ...settings.notebookModeByBook, [book.id]: true },
       readingPositionByBook: { ...settings.readingPositionByBook, [book.id]: 0.72 },
       proofreadingByBook: {
         ...settings.proofreadingByBook,
@@ -350,6 +353,7 @@ describe("IndexedDB repository v3", () => {
     ]);
     expect(await reloaded.settings.get()).toMatchObject({
       lastChapterByBook: { [book.id]: secondChapter.id },
+      notebookModeByBook: { [book.id]: true },
       readingPositionByBook: { [book.id]: 0.72 },
       proofreadingByBook: {
         [book.id]: { dialect: "british", words: ["colourway"] },

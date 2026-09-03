@@ -687,6 +687,7 @@ class LocalAwthorRepository implements AwthorRepository {
         delete data.chapters[bookId];
         delete data.characters[bookId];
         delete data.settings.lastChapterByBook[bookId];
+        delete data.settings.notebookModeByBook[bookId];
         delete data.settings.readingPositionByBook[bookId];
         delete data.settings.proofreadingByBook[bookId];
         if (data.settings.activeBookId === bookId) {

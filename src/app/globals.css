@@ -11,6 +11,7 @@
   --font-serif: var(--font-newsreader);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-outfit);
+  --font-handwriting: var(--font-patrick-hand);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -157,6 +158,39 @@
 
 .manuscript-editor {
   font-variant-ligatures: none;
+}
+
+.notebook-sheet {
+  min-height: min(52rem, calc(100dvh - 10rem));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: 0 1.5rem 4rem color-mix(in oklab, var(--foreground) 9%, transparent);
+  padding: clamp(1.25rem, 5vw, 4rem) clamp(1rem, 7vw, 4.5rem) clamp(4rem, 10vw, 7rem);
+}
+
+.notebook-editor {
+  --notebook-line-height: 2.25rem;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--notebook-line-height) - 1px),
+    color-mix(in oklab, var(--primary) 25%, transparent) calc(var(--notebook-line-height) - 1px),
+    color-mix(in oklab, var(--primary) 25%, transparent) var(--notebook-line-height)
+  );
+  background-position: 0 -0.32rem;
+  background-size: 100% var(--notebook-line-height);
+  caret-color: var(--primary);
+  font-family: var(--font-patrick-hand), cursive;
+  font-size: 1.3rem;
+  letter-spacing: 0.012em;
+  line-height: var(--notebook-line-height);
+}
+
+@media (min-width: 40rem) {
+  .notebook-editor {
+    font-size: 1.4rem;
+  }
 }
 
 .manuscript-page-stack {

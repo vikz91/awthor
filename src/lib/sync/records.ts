@@ -19,6 +19,7 @@ import {
 
 const syncedSettingsSchema = appSettingsSchema.pick({
   editor: true,
+  notebookModeByBook: true,
   proofreadingByBook: true,
 });
 
@@ -282,6 +283,7 @@ export function applySyncRecords(
         delete next.chapters[remote.recordId];
         delete next.characters[remote.recordId];
         delete next.settings.lastChapterByBook[remote.recordId];
+        delete next.settings.notebookModeByBook[remote.recordId];
         delete next.settings.readingPositionByBook[remote.recordId];
         delete next.settings.proofreadingByBook[remote.recordId];
         if (next.settings.activeBookId === remote.recordId) {

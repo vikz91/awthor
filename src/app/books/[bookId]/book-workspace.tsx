@@ -139,6 +139,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     createDefaultBookProofreadingSettings,
   );
   const [documentLayout, setDocumentLayout] = useState<DocumentLayout>("seamless");
+  const [notebookMode, setNotebookMode] = useState(false);
   const [readingChromeVisible, setReadingChromeVisible] = useState(true);
 
   const autosaveRef = useRef<ManuscriptAutosave | null>(null);
@@ -299,6 +300,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         const nextBook = data.books.find((item) => item.id === bookId) ?? null;
         updateSettings(data.settings);
         setDocumentLayout(data.settings.editor.layout);
+        setNotebookMode(data.settings.notebookModeByBook[bookId] ?? false);
 
         if (!nextBook) {
           updateBook(null);
@@ -605,6 +607,58 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     textarea.focus({ preventScroll: true });
     textarea.setSelectionRange(caret.start, caret.end);
   }, []);
+
+  const changeNotebookMode = useCallback(
+    async (enabled: boolean) => {
+      if (enabled === notebookMode) {
+        return;
+      }
+
+      const scrollPosition = currentScrollPosition();
+      const previousMode = notebookMode;
+      setNotebookMode(enabled);
+
+      try {
+        await patchSettings(
+          (current) => ({
+            ...current,
+            notebookModeByBook: {
+              ...current.notebookModeByBook,
+              [bookId]: enabled,
+            },
+          }),
+          { syncPolicy: "deferred", reason: "notebook-mode" },
+        );
+      } catch (reason) {
+        const failedSettings = settingsRef.current;
+        if (failedSettings) {
+          updateSettings({
+            ...failedSettings,
+            notebookModeByBook: {
+              ...failedSettings.notebookModeByBook,
+              [bookId]: previousMode,
+            },
+          });
+        }
+        setNotebookMode(previousMode);
+        throw reason;
+      } finally {
+        requestAnimationFrame(() => {
+          restoreCurrentScrollPosition(scrollPosition);
+          restoreEditorFocus();
+        });
+      }
+    },
+    [
+      bookId,
+      currentScrollPosition,
+      notebookMode,
+      patchSettings,
+      restoreCurrentScrollPosition,
+      restoreEditorFocus,
+      updateSettings,
+    ],
+  );
 
   const dismissSelectionToolbar = useCallback(() => {
     setSelectionToolbar(null);
@@ -1217,6 +1271,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
 
     updateSettings(data.settings);
     setDocumentLayout(data.settings.editor.layout);
+    setNotebookMode(data.settings.notebookModeByBook[bookId] ?? false);
     setProofreadingPreferences(
       resolveBookProofreadingSettings(data.settings, data.profile, bookId),
     );
@@ -2087,8 +2142,13 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
             aria-label={`${book.title}, ${chapterLabel}: ${currentChapter.title}`}
             className={cn(
               "mx-auto w-full",
-              mode === "read" && documentLayout === "pages" ? "max-w-none" : "max-w-[68ch]",
+              mode === "read" && documentLayout === "pages"
+                ? "max-w-none"
+                : mode === "write" && notebookMode
+                  ? "notebook-sheet max-w-[46rem]"
+                  : "max-w-[68ch]",
             )}
+            data-notebook-mode={mode === "write" && notebookMode ? "true" : undefined}
             ref={articleRef}
           >
             <div
@@ -2130,7 +2190,12 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                   ) : (
                     <textarea
                       aria-label={`Markdown source for ${currentChapter.title}`}
-                      className="manuscript-editor field-sizing-content min-h-[62vh] w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-mono text-base leading-[1.75] text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none sm:text-[1.05rem]"
+                      className={cn(
+                        "manuscript-editor field-sizing-content min-h-[62vh] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none",
+                        notebookMode
+                          ? "notebook-editor"
+                          : "font-mono text-base leading-[1.75] sm:text-[1.05rem]",
+                      )}
                       onBlur={handleEditorBlur}
                       onChange={changeDraft}
                       onClick={handleEditorSelection}
@@ -2209,6 +2274,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           draft={draft}
           inspectorOpen={inspectorOpen}
           menuOpen={actionsMenuOpen || chapterChooserOpen || settingsOpen}
+          notebookMode={notebookMode}
           readingChromeVisible={mode === "read" ? readingChromeVisible : undefined}
           mode={mode}
           onActiveToolChange={(tool: WorkspaceTool) => void handleToolChange(tool)}
@@ -2220,6 +2286,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           }}
           onChapterUpdated={updateChapterFromTool}
           onDocumentLayoutChange={changeDocumentLayout}
+          onNotebookModeChange={changeNotebookMode}
           onReadingChromeVisibleChange={
             mode === "read" ? handleReadingChromeVisibleChange : undefined
           }

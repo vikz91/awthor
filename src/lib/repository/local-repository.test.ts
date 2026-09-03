@@ -317,6 +317,7 @@ describe("local repository v2", () => {
     }
     await repository.settings.save({
       ...settings,
+      notebookModeByBook: { ...settings.notebookModeByBook, [book.id]: true },
       proofreadingByBook: {
         ...settings.proofreadingByBook,
         [book.id]: { dialect: "indian", words: ["boudi", "pujo"] },
@@ -324,6 +325,7 @@ describe("local repository v2", () => {
     });
     await repository.deleteBook(book.id);
     expect((await repository.books.get()) ?? []).toEqual([]);
+    expect((await repository.settings.get())?.notebookModeByBook[book.id]).toBeUndefined();
     expect((await repository.settings.get())?.proofreadingByBook[book.id]).toBeUndefined();
     expect(
       storage.getItem(`${repositoryPrefix}:chapters:${encodeURIComponent(book.id)}`),
