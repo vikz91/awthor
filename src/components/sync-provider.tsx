@@ -21,6 +21,7 @@ import type { SyncDeviceState, SyncStatus } from "@/lib/sync/types";
 const repository = getAwthorRepository();
 
 type SyncContextValue = {
+  access: "authorized" | "checking" | "unauthorized";
   configured: boolean;
   lastSuccessfulSyncAt: string | null;
   signedIn: boolean;
@@ -43,6 +44,7 @@ function LocalSyncProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SyncContextValue>(
     () => ({
       configured: false,
+      access: "authorized",
       lastSuccessfulSyncAt: null,
       signedIn: false,
       status: "idle",
@@ -57,6 +59,7 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useUser();
   const stateRef = useRef<SyncDeviceState | null>(null);
   const [status, setStatus] = useState<SyncStatus>("idle");
+  const [access, setAccess] = useState<SyncContextValue["access"]>("checking");
   const [syncStateLoaded, setSyncStateLoaded] = useState(false);
   const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<string | null>(null);
   const inFlight = useRef<Promise<void> | null>(null);
@@ -70,10 +73,37 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
     setSyncStateLoaded(true);
   }, []);
 
+  const checkAccess = useCallback(async () => {
+    if (!isSignedIn) {
+      setAccess("checking");
+      return false;
+    }
+
+    const response = await fetch("/api/sync/access", { credentials: "same-origin" });
+    if (response.ok) {
+      setAccess("authorized");
+      return true;
+    }
+    if (response.status === 403) {
+      setAccess("unauthorized");
+      return false;
+    }
+    throw new Error("Sync account access is temporarily unavailable.");
+  }, [isSignedIn]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    void checkAccess().catch(() => setStatus("error"));
+  }, [checkAccess, isLoaded]);
+
   const syncNow = useCallback(async () => {
     if (!isSignedIn || !navigator.onLine) {
       setStatus(!navigator.onLine ? "offline" : "idle");
       return;
+    }
+    if (!(await checkAccess())) {
+      setStatus("error");
+      throw new Error("This account is not authorized to use Awthor cloud features.");
     }
     if (inFlight.current) return inFlight.current;
 
@@ -108,10 +138,10 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
     })();
     inFlight.current = operation;
     return operation;
-  }, [isSignedIn]);
+  }, [checkAccess, isSignedIn]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !syncStateLoaded) return;
+    if (!isLoaded || !isSignedIn || !syncStateLoaded || access !== "authorized") return;
     let timer: number | null = null;
     const schedule = () => {
       if (timer !== null) window.clearTimeout(timer);
@@ -156,17 +186,18 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(repositoryDeletedEventName, onDeletion);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [isLoaded, isSignedIn, lastSuccessfulSyncAt, syncNow, syncStateLoaded]);
+  }, [access, isLoaded, isSignedIn, lastSuccessfulSyncAt, syncNow, syncStateLoaded]);
 
   const value = useMemo<SyncContextValue>(
     () => ({
+      access,
       configured: true,
       lastSuccessfulSyncAt,
       signedIn: Boolean(isSignedIn),
       status,
       syncNow,
     }),
-    [isSignedIn, lastSuccessfulSyncAt, status, syncNow],
+    [access, isSignedIn, lastSuccessfulSyncAt, status, syncNow],
   );
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
 }

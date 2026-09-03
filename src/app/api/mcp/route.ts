@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { isSyncAccountAuthorized, syncAccessDeniedMessage } from "@/lib/auth/sync-access";
 import { getAwthorDatabase } from "@/lib/database/mongodb";
 import { createRemoteWorkspaceService } from "@/lib/database/remote-workspace";
 import {
@@ -55,6 +56,13 @@ async function requestHandler(request: Request): Promise<Response> {
   const authentication = authenticateMcpBearerRequest(request, clerkAuthentication);
   if (isMcpAuthenticationFailure(authentication)) {
     return createMcpAuthenticationError(authentication);
+  }
+  if (!(await isSyncAccountAuthorized(authentication.userId))) {
+    return createMcpAuthenticationError({
+      error: "insufficient_scope",
+      message: syncAccessDeniedMessage,
+      status: 403,
+    });
   }
 
   try {

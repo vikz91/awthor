@@ -181,13 +181,19 @@ and local-only.
 ```bash
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
 CLERK_SECRET_KEY=sk_...
+# Comma-separated primary Clerk emails allowed to use sync, publishing, and remote MCP.
+ADMIN_EMAILS=writer@example.com
 MONGODB_URI=mongodb+srv://...
 MONGODB_DB=awthor
 ```
 
-In the Clerk dashboard, keep only **Email verification code** enabled. MongoDB records are scoped by
-Clerk's immutable user ID. Sync chooses the newest edit for each matching record, using device ID as
-a deterministic tie-breaker, so simultaneous edits to the same item may replace the older copy.
+In the Clerk dashboard, keep only **Email verification code** enabled. Set `ADMIN_EMAILS` to the
+comma-separated primary Clerk email addresses allowed to use cloud features. This allowlist is
+checked on the server for sync, publishing, and remote MCP requests; it fails closed when unset.
+Other people may still use the local-only app after signing in, but they cannot upload, publish, or
+access cloud data. MongoDB records are scoped by Clerk's immutable user ID. Sync chooses the newest
+edit for each matching record, using device ID as a deterministic tie-breaker, so simultaneous edits
+to the same item may replace the older copy.
 
 The first click on **Sync** is deliberate consent to upload the current full workspace. Thereafter,
 Awthor schedules background sync only for a meaningful local mutation, browser reconnect/focus, or

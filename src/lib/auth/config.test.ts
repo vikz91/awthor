@@ -4,11 +4,16 @@ import { getSyncAccountPresentation } from "./presentation";
 
 describe("optional Clerk configuration", () => {
   test("stays disabled until both Clerk keys are configured", () => {
-    expect(resolveClerkConfiguration({})).toEqual({ enabled: false, publishableKey: null });
+    expect(resolveClerkConfiguration({})).toEqual({
+      adminEmails: [],
+      enabled: false,
+      publishableKey: null,
+    });
     expect(
       resolveClerkConfiguration({ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_example" }),
-    ).toEqual({ enabled: false, publishableKey: "pk_test_example" });
+    ).toEqual({ adminEmails: [], enabled: false, publishableKey: "pk_test_example" });
     expect(resolveClerkConfiguration({ CLERK_SECRET_KEY: "sk_test_example" })).toEqual({
+      adminEmails: [],
       enabled: false,
       publishableKey: null,
     });
@@ -17,10 +22,15 @@ describe("optional Clerk configuration", () => {
   test("enables Clerk only with non-empty public and secret keys", () => {
     expect(
       resolveClerkConfiguration({
+        ADMIN_EMAILS: "writer@example.com",
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: " pk_test_example ",
         CLERK_SECRET_KEY: " sk_test_example ",
       }),
-    ).toEqual({ enabled: true, publishableKey: "pk_test_example" });
+    ).toEqual({
+      adminEmails: ["writer@example.com"],
+      enabled: true,
+      publishableKey: "pk_test_example",
+    });
   });
 });
 

@@ -23,18 +23,22 @@ function formatLastSync(value: string | null) {
 }
 
 export function SyncControl({ variant }: SyncControlProps) {
-  const { configured, lastSuccessfulSyncAt, signedIn, status, syncNow } = useSync();
+  const { access, configured, lastSuccessfulSyncAt, signedIn, status, syncNow } = useSync();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const label = variant === "settings" ? "Sync now" : "Sync";
   const description =
-    status === "syncing"
-      ? "Syncing your local writing workspace…"
-      : status === "offline"
-        ? "Waiting for an internet connection."
-        : status === "error"
-          ? "Sync failed. Select Sync to retry."
-          : formatLastSync(lastSuccessfulSyncAt);
+    signedIn && access === "unauthorized"
+      ? "This account is not authorized to use Awthor cloud features. Your books remain on this device."
+      : signedIn && access === "checking"
+        ? "Checking whether this account can use cloud sync…"
+        : status === "syncing"
+          ? "Syncing your local writing workspace…"
+          : status === "offline"
+            ? "Waiting for an internet connection."
+            : status === "error"
+              ? "Sync failed. Select Sync to retry."
+              : formatLastSync(lastSuccessfulSyncAt);
   const Icon =
     status === "syncing"
       ? LoaderCircle
@@ -47,6 +51,10 @@ export function SyncControl({ variant }: SyncControlProps) {
   async function handleSync() {
     if (!configured || !signedIn) {
       setOpen(true);
+      return;
+    }
+    if (access === "unauthorized") {
+      setError("This account is not authorized to use Awthor cloud features.");
       return;
     }
     setError(null);
@@ -70,7 +78,11 @@ export function SyncControl({ variant }: SyncControlProps) {
             </h2>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
           </div>
-          <Button disabled={status === "syncing"} onClick={() => void handleSync()} size="sm">
+          <Button
+            disabled={status === "syncing" || (signedIn && access === "checking")}
+            onClick={() => void handleSync()}
+            size="sm"
+          >
             <Icon aria-hidden="true" className={cn(status === "syncing" && "animate-spin")} />
             {label}
           </Button>
@@ -89,7 +101,7 @@ export function SyncControl({ variant }: SyncControlProps) {
     <>
       <Button
         aria-label={`${label}. ${description}`}
-        disabled={status === "syncing"}
+        disabled={status === "syncing" || (signedIn && access === "checking")}
         onClick={() => void handleSync()}
         size="sm"
         title={description}
