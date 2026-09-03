@@ -37,9 +37,9 @@ export function createMarketingMetadata({
       images: [
         {
           url: "/og.png",
-          width: 1731,
-          height: 909,
-          alt: "Awthor local-first novel writing workspace",
+          width: 1200,
+          height: 630,
+          alt: "Awthor — a free, open-source, local-first novel-writing app",
         },
       ],
       locale: "en_US",
@@ -52,7 +52,7 @@ export function createMarketingMetadata({
       images: [
         {
           url: "/og.png",
-          alt: "Awthor local-first novel writing workspace",
+          alt: "Awthor — a free, open-source, local-first novel-writing app",
         },
       ],
     },
