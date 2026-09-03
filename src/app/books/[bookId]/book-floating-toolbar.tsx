@@ -30,6 +30,7 @@ type BookFloatingToolbarProps = {
   draft: string;
   inspectorOpen: boolean;
   menuOpen: boolean;
+  readingChromeVisible?: boolean;
   mode: WorkspaceMode;
   activeTool: WorkspaceTool;
   onActiveToolChange: (tool: WorkspaceTool) => void;
@@ -37,6 +38,7 @@ type BookFloatingToolbarProps = {
   onRequestWrite: () => void;
   onChapterUpdated: (chapter: Chapter) => void;
   onDocumentLayoutChange: (layout: DocumentLayout) => Promise<void>;
+  onReadingChromeVisibleChange?: (visible: boolean) => void;
   onBeforeToolOpen: () => Promise<void>;
   onProofreadingPreferencesChange: (preferences: BookProofreadingSettings) => Promise<void>;
   onToolDirtyChange: (tool: Exclude<WorkspaceTool, null>, dirty: boolean) => void;
@@ -53,12 +55,14 @@ export function BookFloatingToolbar({
   draft,
   inspectorOpen,
   menuOpen,
+  readingChromeVisible,
   mode,
   onActiveToolChange,
   onApplyDraft,
   onBeforeToolOpen,
   onChapterUpdated,
   onDocumentLayoutChange,
+  onReadingChromeVisibleChange,
   onProofreadingPreferencesChange,
   onRequestWrite,
   onRestoreEditorFocus,
@@ -237,6 +241,8 @@ export function BookFloatingToolbar({
         heldOpen={activeTool !== null || openingTool !== null || menuOpen}
         items={items}
         label="Book tools"
+        onVisibleChange={onReadingChromeVisibleChange}
+        visible={readingChromeVisible}
       />
       {activeTool === "spelling" ? (
         <ProofreadingDrawer

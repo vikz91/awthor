@@ -4,11 +4,34 @@ export const syncRecordTypes = [
   "profile",
   "theme",
   "settings",
+  "progress",
   "book",
   "chapter",
   "character",
 ] as const;
 export type SyncRecordType = (typeof syncRecordTypes)[number];
+
+export const activeReadingProgressPayloadSchema = z
+  .object({
+    activeBookId: z.string().nullable(),
+    kind: z.literal("active"),
+  })
+  .strict();
+
+export const bookReadingProgressPayloadSchema = z
+  .object({
+    bookId: z.string().min(1),
+    chapterId: z.string().nullable(),
+    kind: z.literal("book"),
+    position: z.number().finite().min(0).max(1),
+  })
+  .strict();
+
+export const readingProgressPayloadSchema = z.discriminatedUnion("kind", [
+  activeReadingProgressPayloadSchema,
+  bookReadingProgressPayloadSchema,
+]);
+export type ReadingProgressPayload = z.infer<typeof readingProgressPayloadSchema>;
 
 export const syncRecordSchema = z.object({
   contentHash: z

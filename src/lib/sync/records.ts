@@ -7,13 +7,20 @@ import {
   type RepositoryData,
   themeSchema,
 } from "@/lib/repository";
-import type {
-  SyncDeviceState,
-  SyncedRecord,
-  SyncRecord,
-  SyncRecordState,
-  SyncRecordType,
+import {
+  type ReadingProgressPayload,
+  readingProgressPayloadSchema,
+  type SyncDeviceState,
+  type SyncedRecord,
+  type SyncRecord,
+  type SyncRecordState,
+  type SyncRecordType,
 } from "./types";
+
+const syncedSettingsSchema = appSettingsSchema.pick({
+  editor: true,
+  proofreadingByBook: true,
+});
 
 function recordKey(recordType: SyncRecord["recordType"], recordId: string) {
   return `${recordType}:${recordId}`;
@@ -89,10 +96,28 @@ function currentRecords(data: RepositoryData) {
   if (data.profile)
     records.push({ payload: data.profile, recordId: "profile", recordType: "profile" });
   records.push({ payload: data.theme, recordId: "theme", recordType: "theme" });
-  const { backupReminder: _backupReminder, ...settings } = data.settings;
-  records.push({ payload: settings, recordId: "settings", recordType: "settings" });
+  records.push({
+    payload: syncedSettingsSchema.parse(data.settings),
+    recordId: "settings",
+    recordType: "settings",
+  });
+  records.push({
+    payload: { activeBookId: data.settings.activeBookId, kind: "active" },
+    recordId: "active",
+    recordType: "progress",
+  });
 
   for (const book of data.books) {
+    records.push({
+      payload: {
+        bookId: book.id,
+        chapterId: data.settings.lastChapterByBook[book.id] ?? null,
+        kind: "book",
+        position: data.settings.readingPositionByBook[book.id] ?? 0,
+      },
+      recordId: book.id,
+      recordType: "progress",
+    });
     records.push({ payload: book, recordId: book.id, recordType: "book" });
     for (const chapter of data.chapters[book.id] ?? []) {
       records.push({
@@ -245,13 +270,23 @@ export function applySyncRecords(
     } else if (remote.recordType === "theme" && !remote.deleted) {
       next.theme = themeSchema.parse(remote.payload);
     } else if (remote.recordType === "settings" && !remote.deleted) {
-      const { backupReminder } = next.settings;
-      next.settings = { ...appSettingsSchema.parse(remote.payload), backupReminder };
+      next.settings = appSettingsSchema.parse({
+        ...next.settings,
+        ...syncedSettingsSchema.parse(remote.payload),
+      });
+    } else if (remote.recordType === "progress") {
+      applyReadingProgressRecord(next, remote);
     } else if (remote.recordType === "book") {
       if (remote.deleted) {
         books.delete(remote.recordId);
         delete next.chapters[remote.recordId];
         delete next.characters[remote.recordId];
+        delete next.settings.lastChapterByBook[remote.recordId];
+        delete next.settings.readingPositionByBook[remote.recordId];
+        delete next.settings.proofreadingByBook[remote.recordId];
+        if (next.settings.activeBookId === remote.recordId) {
+          next.settings.activeBookId = books.values().next().value?.id ?? null;
+        }
       } else {
         books.set(remote.recordId, bookSchema.parse(remote.payload));
         next.chapters[remote.recordId] ??= [];
@@ -294,6 +329,14 @@ function isLocalRecordMissing(
 ) {
   if (record.deleted) return false;
   if (record.recordType === "profile") return data.profile === null;
+  if (record.recordType === "progress") {
+    const payload = readingProgressPayloadSchema.parse(record.payload);
+    if (payload.kind === "active") return data.settings.activeBookId !== payload.activeBookId;
+    return (
+      data.settings.lastChapterByBook[payload.bookId] !== payload.chapterId ||
+      data.settings.readingPositionByBook[payload.bookId] !== payload.position
+    );
+  }
   if (record.recordType === "book") return !books.has(record.recordId);
   if (record.recordType === "chapter") {
     const bookId =
@@ -308,4 +351,30 @@ function isLocalRecordMissing(
     return !(data.characters[bookId] ?? []).some((character) => character.id === characterId);
   }
   return false;
+}
+
+function applyReadingProgressRecord(data: RepositoryData, record: SyncedRecord): void {
+  if (record.deleted) {
+    if (record.recordId === "active") {
+      data.settings.activeBookId = null;
+      return;
+    }
+    delete data.settings.lastChapterByBook[record.recordId];
+    delete data.settings.readingPositionByBook[record.recordId];
+    if (data.settings.activeBookId === record.recordId) data.settings.activeBookId = null;
+    return;
+  }
+
+  const payload: ReadingProgressPayload = readingProgressPayloadSchema.parse(record.payload);
+  if (payload.kind === "active") {
+    data.settings.activeBookId = payload.activeBookId;
+    return;
+  }
+
+  if (payload.chapterId === null) {
+    delete data.settings.lastChapterByBook[payload.bookId];
+  } else {
+    data.settings.lastChapterByBook[payload.bookId] = payload.chapterId;
+  }
+  data.settings.readingPositionByBook[payload.bookId] = payload.position;
 }

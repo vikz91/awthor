@@ -13,6 +13,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  readRepositoryMutation,
+  repositoryDeletedEventName,
+  repositoryMutatedEventName,
+} from "@/lib/repository";
 import type { SyncStatus } from "@/lib/sync/types";
 import { cn } from "@/lib/utils";
 
@@ -79,6 +84,10 @@ export function shouldShowNavbarSyncOnMobile({
   );
 }
 
+export function shouldMarkRepositoryMutationPending(event: Event) {
+  return readRepositoryMutation(event).syncPolicy !== "local-only";
+}
+
 function formatLastSync(value: string | null) {
   if (!value) return "Not synced yet";
   return `Last synced ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))}`;
@@ -132,12 +141,17 @@ export function SyncControl({ mobileVisibility = "contextual", variant }: SyncCo
 
   useEffect(() => {
     if (variant !== "navbar") return;
-    const onLocalChange = () => dispatchNavbarFeedback({ type: "local-change" });
-    window.addEventListener("awthor:repository-mutated", onLocalChange);
-    window.addEventListener("awthor:repository-deleted", onLocalChange);
+    const onMutation = (event: Event) => {
+      if (shouldMarkRepositoryMutationPending(event)) {
+        dispatchNavbarFeedback({ type: "local-change" });
+      }
+    };
+    const onDeletion = () => dispatchNavbarFeedback({ type: "local-change" });
+    window.addEventListener(repositoryMutatedEventName, onMutation);
+    window.addEventListener(repositoryDeletedEventName, onDeletion);
     return () => {
-      window.removeEventListener("awthor:repository-mutated", onLocalChange);
-      window.removeEventListener("awthor:repository-deleted", onLocalChange);
+      window.removeEventListener(repositoryMutatedEventName, onMutation);
+      window.removeEventListener(repositoryDeletedEventName, onDeletion);
     };
   }, [variant]);
 

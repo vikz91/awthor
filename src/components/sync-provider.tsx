@@ -12,10 +12,22 @@ import {
   useState,
 } from "react";
 import { useSyncAccountConfigured } from "@/components/auth-provider";
-import { getAwthorRepository, repositoryDeletedEventName } from "@/lib/repository";
+import {
+  getAwthorRepository,
+  readRepositoryMutation,
+  repositoryDeletedEventName,
+  repositoryMutatedEventName,
+} from "@/lib/repository";
 import { syncRepository } from "@/lib/sync/client";
 import { readSyncDeviceState, writeSyncDeviceState } from "@/lib/sync/device-state";
 import { queueSyncDeletions, type SyncDeletion } from "@/lib/sync/records";
+import {
+  type AutomaticSyncPolicy,
+  getSyncBackoffDelayMs,
+  isSuccessfulSyncStale,
+  mergeAutomaticSyncPolicies,
+  resolveAutomaticSyncSchedule,
+} from "@/lib/sync/scheduler";
 import type { SyncDeviceState, SyncStatus } from "@/lib/sync/types";
 
 const repository = getAwthorRepository();
@@ -56,7 +68,7 @@ function LocalSyncProvider({ children }: { children: ReactNode }) {
 }
 
 function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const stateRef = useRef<SyncDeviceState | null>(null);
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [access, setAccess] = useState<SyncContextValue["access"]>("checking");
@@ -64,7 +76,26 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
   const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<string | null>(null);
   const inFlight = useRef<Promise<void> | null>(null);
   const applyingRemoteChange = useRef(false);
-  const initialAutoSyncHandled = useRef(false);
+  const accessRef = useRef<SyncContextValue["access"]>("checking");
+  const authorizedUserId = useRef<string | null>(null);
+  const accessCheckInFlight = useRef<{ promise: Promise<boolean>; userId: string } | null>(null);
+  const activeUserId = isSignedIn ? (user?.id ?? null) : null;
+  const activeUserIdRef = useRef(activeUserId);
+  activeUserIdRef.current = activeUserId;
+  const automaticTimer = useRef<number | null>(null);
+  const automaticTimerPolicy = useRef<AutomaticSyncPolicy | null>(null);
+  const automaticTimerDeadline = useRef<number | null>(null);
+  const automaticProgressDeadline = useRef<number | null>(null);
+  const failureCount = useRef(0);
+  const backoffUntil = useRef(0);
+  const localMutationRevision = useRef(0);
+  const hasLocalChanges = useRef(false);
+  const trailingPolicy = useRef<AutomaticSyncPolicy | null>(null);
+  const initialAutoSyncUserId = useRef<string | null>(null);
+  const runSyncRef = useRef<((manual: boolean) => Promise<void>) | null>(null);
+  const scheduleAutomaticSyncRef = useRef<
+    ((policy: AutomaticSyncPolicy, requireTrailing?: boolean) => void) | null
+  >(null);
 
   useEffect(() => {
     const state = readSyncDeviceState(window.localStorage);
@@ -73,86 +104,235 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
     setSyncStateLoaded(true);
   }, []);
 
+  const setAccessState = useCallback((next: SyncContextValue["access"]) => {
+    accessRef.current = next;
+    setAccess(next);
+  }, []);
+
   const checkAccess = useCallback(async () => {
-    if (!isSignedIn) {
-      setAccess("checking");
+    const userId = activeUserId;
+    if (!userId) {
+      authorizedUserId.current = null;
+      setAccessState("checking");
       return false;
     }
-
-    const response = await fetch("/api/sync/access", { credentials: "same-origin" });
-    if (response.ok) {
-      setAccess("authorized");
+    if (authorizedUserId.current === userId) {
+      setAccessState("authorized");
       return true;
     }
-    if (response.status === 403) {
-      setAccess("unauthorized");
-      return false;
+    if (accessCheckInFlight.current?.userId === userId) {
+      return accessCheckInFlight.current.promise;
     }
-    throw new Error("Sync account access is temporarily unavailable.");
-  }, [isSignedIn]);
+
+    const promise = (async () => {
+      const response = await fetch("/api/sync/access", { credentials: "same-origin" });
+      if (activeUserIdRef.current !== userId) return false;
+      if (response.ok) {
+        authorizedUserId.current = userId;
+        setAccessState("authorized");
+        return true;
+      }
+      if (response.status === 403) {
+        setAccessState("unauthorized");
+        return false;
+      }
+      throw new Error("Sync account access is temporarily unavailable.");
+    })();
+    accessCheckInFlight.current = { promise, userId };
+    try {
+      return await promise;
+    } finally {
+      if (accessCheckInFlight.current?.promise === promise) {
+        accessCheckInFlight.current = null;
+      }
+    }
+  }, [activeUserId, setAccessState]);
 
   useEffect(() => {
     if (!isLoaded) return;
     void checkAccess().catch(() => setStatus("error"));
   }, [checkAccess, isLoaded]);
 
-  const syncNow = useCallback(async () => {
-    if (!isSignedIn || !navigator.onLine) {
-      setStatus(!navigator.onLine ? "offline" : "idle");
-      return;
-    }
-    if (!(await checkAccess())) {
-      setStatus("error");
-      throw new Error("This account is not authorized to use Awthor cloud features.");
-    }
-    if (inFlight.current) return inFlight.current;
+  const clearScheduledSync = useCallback(() => {
+    if (automaticTimer.current !== null) window.clearTimeout(automaticTimer.current);
+    automaticTimer.current = null;
+    automaticTimerPolicy.current = null;
+    automaticTimerDeadline.current = null;
+    automaticProgressDeadline.current = null;
+  }, []);
 
-    const operation = (async () => {
-      setStatus("syncing");
-      const state = stateRef.current ?? readSyncDeviceState(window.localStorage);
-      try {
-        const next = await syncRepository({
-          onApplyingRemoteChange: (applying) => {
-            applyingRemoteChange.current = applying;
-          },
-          repository,
-          state: { ...state, lastAttemptAt: new Date().toISOString() },
-        });
-        stateRef.current = next;
-        writeSyncDeviceState(window.localStorage, next);
-        setLastSuccessfulSyncAt(next.lastSuccessfulSyncAt);
-        setStatus("idle");
-      } catch (error) {
-        const next = {
-          ...(stateRef.current ?? state),
-          lastAttemptAt: new Date().toISOString(),
-          lastError: error instanceof Error ? error.message : "Sync could not be completed.",
-        };
-        stateRef.current = next;
-        writeSyncDeviceState(window.localStorage, next);
-        setStatus("error");
-        throw error;
-      } finally {
-        inFlight.current = null;
+  const scheduleAutomaticSync = useCallback(
+    (policy: AutomaticSyncPolicy, requireTrailing = false) => {
+      if (inFlight.current) {
+        if (requireTrailing) {
+          trailingPolicy.current = mergeAutomaticSyncPolicies(trailingPolicy.current, policy);
+        }
+        return;
       }
-    })();
-    inFlight.current = operation;
-    return operation;
-  }, [checkAccess, isSignedIn]);
+      if (accessRef.current === "unauthorized") return;
+
+      const now = Date.now();
+      const currentSchedule =
+        automaticTimer.current !== null &&
+        automaticTimerPolicy.current !== null &&
+        automaticTimerDeadline.current !== null
+          ? {
+              deadlineAt: automaticTimerDeadline.current,
+              policy: automaticTimerPolicy.current,
+              ...(automaticProgressDeadline.current === null
+                ? {}
+                : { progressDeadlineAt: automaticProgressDeadline.current }),
+            }
+          : null;
+      const nextSchedule = resolveAutomaticSyncSchedule(
+        currentSchedule,
+        policy,
+        now,
+        backoffUntil.current,
+      );
+      if (
+        currentSchedule &&
+        currentSchedule.deadlineAt === nextSchedule.deadlineAt &&
+        currentSchedule.policy === nextSchedule.policy
+      ) {
+        return;
+      }
+
+      clearScheduledSync();
+      automaticTimerPolicy.current = nextSchedule.policy;
+      automaticTimerDeadline.current = nextSchedule.deadlineAt;
+      automaticProgressDeadline.current = nextSchedule.progressDeadlineAt ?? null;
+      automaticTimer.current = window.setTimeout(
+        () => {
+          automaticTimer.current = null;
+          automaticTimerPolicy.current = null;
+          automaticTimerDeadline.current = null;
+          automaticProgressDeadline.current = null;
+          void runSyncRef.current?.(false).catch(() => undefined);
+        },
+        Math.max(0, nextSchedule.deadlineAt - now),
+      );
+    },
+    [clearScheduledSync],
+  );
+  scheduleAutomaticSyncRef.current = scheduleAutomaticSync;
+
+  const runSync = useCallback(
+    async (manual: boolean) => {
+      if (manual) clearScheduledSync();
+      if (inFlight.current) return inFlight.current;
+
+      const operation = Promise.resolve().then(async () => {
+        const revisionAtStart = localMutationRevision.current;
+        let attempted = false;
+        let succeeded = false;
+
+        try {
+          if (!isSignedIn) {
+            setStatus("idle");
+            return;
+          }
+          if (!navigator.onLine) {
+            setStatus("offline");
+            return;
+          }
+
+          attempted = true;
+          if (!(await checkAccess())) {
+            throw new Error("This account is not authorized to use Awthor cloud features.");
+          }
+
+          setStatus("syncing");
+          const state = stateRef.current ?? readSyncDeviceState(window.localStorage);
+          const next = await syncRepository({
+            onApplyingRemoteChange: (applying) => {
+              applyingRemoteChange.current = applying;
+            },
+            repository,
+            state: { ...state, lastAttemptAt: new Date().toISOString() },
+          });
+          stateRef.current = next;
+          writeSyncDeviceState(window.localStorage, next);
+          setLastSuccessfulSyncAt(next.lastSuccessfulSyncAt);
+          if (localMutationRevision.current === revisionAtStart) {
+            hasLocalChanges.current = false;
+          }
+          failureCount.current = 0;
+          backoffUntil.current = 0;
+          succeeded = true;
+          setStatus("idle");
+        } catch (error) {
+          failureCount.current += 1;
+          backoffUntil.current = Date.now() + getSyncBackoffDelayMs(failureCount.current);
+          const next = {
+            ...(stateRef.current ?? readSyncDeviceState(window.localStorage)),
+            lastAttemptAt: new Date().toISOString(),
+            lastError: error instanceof Error ? error.message : "Sync could not be completed.",
+          };
+          stateRef.current = next;
+          writeSyncDeviceState(window.localStorage, next);
+          setStatus("error");
+          throw error;
+        } finally {
+          inFlight.current = null;
+          const queuedTrailingPolicy = trailingPolicy.current;
+          trailingPolicy.current = null;
+          const changedDuringSync = localMutationRevision.current > revisionAtStart;
+
+          if (changedDuringSync || queuedTrailingPolicy) {
+            hasLocalChanges.current = true;
+            scheduleAutomaticSyncRef.current?.(queuedTrailingPolicy ?? "deferred");
+          } else if (
+            attempted &&
+            !succeeded &&
+            hasLocalChanges.current &&
+            navigator.onLine &&
+            accessRef.current === "authorized"
+          ) {
+            scheduleAutomaticSyncRef.current?.("immediate");
+          }
+        }
+      });
+      inFlight.current = operation;
+      return operation;
+    },
+    [checkAccess, clearScheduledSync, isSignedIn],
+  );
+  runSyncRef.current = runSync;
+
+  const syncNow = useCallback(async () => runSync(true), [runSync]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !syncStateLoaded || access !== "authorized") return;
-    let timer: number | null = null;
-    const schedule = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => void syncNow().catch(() => undefined), 800);
+    if (!isLoaded || !isSignedIn || !syncStateLoaded) return;
+
+    const markLocalChange = (policy: AutomaticSyncPolicy) => {
+      localMutationRevision.current += 1;
+      hasLocalChanges.current = true;
+      scheduleAutomaticSync(policy, true);
     };
-    const onOnline = () => void syncNow().catch(() => undefined);
+    const scheduleForegroundSync = () => {
+      const lastSuccess = stateRef.current?.lastSuccessfulSyncAt ?? null;
+      if (hasLocalChanges.current || isSuccessfulSyncStale(lastSuccess)) {
+        scheduleAutomaticSync("immediate");
+        return true;
+      }
+      return false;
+    };
+    const onOnline = () => {
+      if (!scheduleForegroundSync()) setStatus("idle");
+    };
+    const onOffline = () => {
+      clearScheduledSync();
+      setStatus("offline");
+    };
     const onVisibility = () => {
-      if (document.visibilityState === "visible") onOnline();
+      if (document.visibilityState === "visible") scheduleForegroundSync();
     };
-    const onMutation = () => {
-      if (!applyingRemoteChange.current) schedule();
+    const onMutation = (event: Event) => {
+      if (applyingRemoteChange.current) return;
+      const mutation = readRepositoryMutation(event);
+      if (mutation.syncPolicy === "local-only") return;
+      markLocalChange(mutation.syncPolicy);
     };
     const onDeletion = (event: Event) => {
       if (applyingRemoteChange.current) return;
@@ -163,30 +343,50 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
         .then((next) => {
           stateRef.current = next;
           writeSyncDeviceState(window.localStorage, next);
-          schedule();
+          markLocalChange("immediate");
         })
         .catch(() => {
           setStatus("error");
         });
     };
-    if (!initialAutoSyncHandled.current) {
-      initialAutoSyncHandled.current = true;
-      if (lastSuccessfulSyncAt) schedule();
+
+    if (initialAutoSyncUserId.current !== activeUserId) {
+      initialAutoSyncUserId.current = activeUserId;
+      const lastSuccess = stateRef.current?.lastSuccessfulSyncAt ?? null;
+      if (lastSuccess && isSuccessfulSyncStale(lastSuccess)) {
+        scheduleAutomaticSync("immediate");
+      }
     }
+
     window.addEventListener("online", onOnline);
-    window.addEventListener("focus", onOnline);
-    window.addEventListener("awthor:repository-mutated", onMutation);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("focus", scheduleForegroundSync);
+    window.addEventListener(repositoryMutatedEventName, onMutation);
     window.addEventListener(repositoryDeletedEventName, onDeletion);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      if (timer !== null) window.clearTimeout(timer);
+      clearScheduledSync();
       window.removeEventListener("online", onOnline);
-      window.removeEventListener("focus", onOnline);
-      window.removeEventListener("awthor:repository-mutated", onMutation);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("focus", scheduleForegroundSync);
+      window.removeEventListener(repositoryMutatedEventName, onMutation);
       window.removeEventListener(repositoryDeletedEventName, onDeletion);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [access, isLoaded, isSignedIn, lastSuccessfulSyncAt, syncNow, syncStateLoaded]);
+  }, [
+    activeUserId,
+    clearScheduledSync,
+    isLoaded,
+    isSignedIn,
+    scheduleAutomaticSync,
+    syncStateLoaded,
+  ]);
+
+  useEffect(() => {
+    if (access === "unauthorized") clearScheduledSync();
+  }, [access, clearScheduledSync]);
+
+  useEffect(() => clearScheduledSync, [clearScheduledSync]);
 
   const value = useMemo<SyncContextValue>(
     () => ({

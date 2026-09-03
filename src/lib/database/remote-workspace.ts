@@ -49,6 +49,10 @@ const remoteUrlSchema = z
   });
 const chapterRecordSchema = chapterSchema.and(z.object({ bookId: idSchema }));
 const characterRecordSchema = characterSchema.and(z.object({ bookId: idSchema }));
+const syncedSettingsSchema = appSettingsSchema.pick({
+  editor: true,
+  proofreadingByBook: true,
+});
 const remoteCharacterFields = {
   arc: z.string().max(10_000).optional(),
   characteristics: z.array(z.string().max(500)).max(100).optional(),
@@ -359,7 +363,10 @@ export class RemoteWorkspaceService {
   async deleteBook(bookId: string) {
     const workspace = await this.workspace();
     this.requireBook(workspace, bookId);
-    const records: SyncRecord[] = [makeRecord("book", bookId, null, true)];
+    const records: SyncRecord[] = [
+      makeRecord("book", bookId, null, true),
+      makeRecord("progress", bookId, null, true),
+    ];
     for (const chapter of workspace.chapters[bookId])
       records.push(makeRecord("chapter", recordId(bookId, chapter.id), null, true));
     for (const character of workspace.characters[bookId])
@@ -464,8 +471,7 @@ export class RemoteWorkspaceService {
   }
   async updateSettings(input: unknown) {
     const settings = appSettingsSchema.parse(input);
-    const { backupReminder: _backupReminder, ...synced } = settings;
-    await this.write([makeRecord("settings", "settings", synced)]);
+    await this.write([makeRecord("settings", "settings", syncedSettingsSchema.parse(settings))]);
     return settings;
   }
   async importData(input: unknown) {
@@ -487,17 +493,22 @@ export class RemoteWorkspaceService {
         const workspace = await this.workspace(false, session);
         const records: SyncRecord[] = [
           makeRecord("theme", "theme", data.theme),
-          makeRecord(
-            "settings",
-            "settings",
-            (() => {
-              const { backupReminder: _backupReminder, ...settings } = data.settings;
-              return settings;
-            })(),
-          ),
+          makeRecord("settings", "settings", syncedSettingsSchema.parse(data.settings)),
+          makeRecord("progress", "active", {
+            activeBookId: data.settings.activeBookId,
+            kind: "active",
+          }),
         ];
         if (data.profile) records.push(makeRecord("profile", "profile", data.profile));
         for (const book of data.books) {
+          records.push(
+            makeRecord("progress", book.id, {
+              bookId: book.id,
+              chapterId: data.settings.lastChapterByBook[book.id] ?? null,
+              kind: "book",
+              position: data.settings.readingPositionByBook[book.id] ?? 0,
+            }),
+          );
           records.push(makeRecord("book", book.id, book));
           for (const chapter of data.chapters[book.id] ?? [])
             records.push(

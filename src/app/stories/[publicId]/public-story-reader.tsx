@@ -201,6 +201,7 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
                 >
                   {layout === "pages" ? (
                     <PagedManuscript
+                      bookTitle={story.book.title}
                       chapterLabel={`Chapter ${chapter.number}`}
                       showTitle={showTitle}
                       source={withoutLeadingMarkdownTitle(chapter.body)}

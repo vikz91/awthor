@@ -5,6 +5,7 @@ import {
   createIndexedDbAwthorRepository,
   type IndexedDbAwthorRepositoryOptions,
   indexedDbRepositoryPrefix,
+  repositoryDeletedEventName,
 } from "./indexeddb-repository";
 import {
   createLocalAwthorRepository,
@@ -12,6 +13,7 @@ import {
   repositoryPrefix as localRepositoryPrefix,
   type StorageLike,
 } from "./local-repository";
+import { readRepositoryMutation, repositoryMutatedEventName } from "./mutation-events";
 import { createSeedRepositoryData, unseedRepositoryData } from "./seed-data";
 
 class MemoryStorage implements StorageLike {
@@ -92,6 +94,92 @@ async function countDatabaseRecords(databaseName: string) {
 }
 
 describe("IndexedDB repository v3", () => {
+  test("reports a progress tombstone when deleting a book", async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const eventTarget = new EventTarget();
+    const deleted: Array<{ recordId: string; recordType: string }> = [];
+    eventTarget.addEventListener(repositoryDeletedEventName, (event) => {
+      deleted.push(...(event as CustomEvent<typeof deleted>).detail);
+    });
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: eventTarget,
+    });
+
+    try {
+      const repository = createIndexedDbAwthorRepository(repositoryOptions(new MemoryStorage()));
+      await repository.initialize();
+      const book = await repository.createBook({ title: "Finished", author: "A. Writer" });
+      deleted.length = 0;
+
+      await repository.deleteBook(book.id);
+
+      expect(deleted).toContainEqual({ recordId: book.id, recordType: "book" });
+      expect(deleted).toContainEqual({ recordId: book.id, recordType: "progress" });
+    } finally {
+      if (previousWindow) {
+        Object.defineProperty(globalThis, "window", previousWindow);
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
+  });
+
+  test("honors sync policy and suppresses identical settings and manuscript events", async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const eventTarget = new EventTarget();
+    const mutations: Event[] = [];
+    eventTarget.addEventListener(repositoryMutatedEventName, (event) => mutations.push(event));
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: eventTarget,
+    });
+
+    try {
+      const storage = new MemoryStorage();
+      const repository = createIndexedDbAwthorRepository(repositoryOptions(storage));
+      await repository.initialize();
+      const book = await repository.createBook({ title: "Quiet saves", author: "A. Writer" });
+      const chapter = (await repository.chapters.list(book.id))?.[0];
+      const settings = await repository.settings.get();
+      if (!chapter || !settings) throw new Error("Expected initialized book settings.");
+      mutations.length = 0;
+
+      await repository.settings.save(settings, { syncPolicy: "immediate" });
+      await repository.settings.save(
+        { ...settings, readingPositionByBook: { [book.id]: 0.3 } },
+        { reason: "reading-position", syncPolicy: "local-only" },
+      );
+      await repository.settings.save(
+        { ...settings, readingPositionByBook: { [book.id]: 0.3 } },
+        { syncPolicy: "immediate" },
+      );
+
+      expect(mutations).toHaveLength(1);
+      expect(readRepositoryMutation(mutations[0])).toEqual({
+        reason: "reading-position",
+        syncPolicy: "local-only",
+      });
+
+      mutations.length = 0;
+      await repository.saveManuscript(book.id, chapter.id, chapter.body);
+      await repository.saveManuscript(book.id, chapter.id, "# Quiet saves\n\nChanged once.");
+      await repository.saveManuscript(book.id, chapter.id, "# Quiet saves\n\nChanged once.");
+
+      expect(mutations).toHaveLength(1);
+      expect(readRepositoryMutation(mutations[0])).toEqual({
+        reason: "manuscript-saved",
+        syncPolicy: "deferred",
+      });
+    } finally {
+      if (previousWindow) {
+        Object.defineProperty(globalThis, "window", previousWindow);
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
+  });
+
   test("migrates the v2 localStorage repository and removes its large collection keys", async () => {
     const storage = new MemoryStorage();
     const localRepository = createLocalAwthorRepository(() => storage);

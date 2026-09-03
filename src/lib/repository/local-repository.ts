@@ -15,6 +15,7 @@ import {
   type ManuscriptSaveResult,
   type MigrationResult,
   type RepositoryData,
+  type RepositoryMutationOptions,
   type ScopedCollectionRepository,
   type UpdateBookInput,
   type UpdateChapterInput,
@@ -36,6 +37,7 @@ import {
   type Theme,
   themeSchema,
 } from "./models";
+import { announceRepositoryMutation } from "./mutation-events";
 
 export const repositorySchemaVersion = 2;
 export const repositoryPrefix = `awthor:repository:v${repositorySchemaVersion}`;
@@ -114,6 +116,10 @@ function envelope(payload: unknown): StoredEnvelope {
 
 function stored(payload: unknown): string {
   return JSON.stringify(envelope(payload));
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function normalizeStorageError(message: string, error: unknown): RepositoryStorageError {
@@ -373,7 +379,13 @@ function aggregateBook(book: Book, chapters: readonly Chapter[], updatedAt: stri
   });
 }
 
-type MutationQueue = <Value>(operation: () => Promise<Value>) => Promise<Value>;
+type MutationQueueOptions<Value> = RepositoryMutationOptions & {
+  shouldAnnounce?: (value: Value) => boolean;
+};
+type MutationQueue = <Value>(
+  operation: () => Promise<Value>,
+  options?: MutationQueueOptions<Value>,
+) => Promise<Value>;
 
 class LocalValueRepository<Value> implements ValueRepository<Value> {
   constructor(
@@ -390,19 +402,38 @@ class LocalValueRepository<Value> implements ValueRepository<Value> {
     return raw ? parseStoredValue(raw, this.schema, this.keyName) : null;
   }
 
-  async save(value: Value): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      const parsed = this.schema.parse(value);
-      mutateStorage(this.getStorage(), new Map([[this.keyName, stored(parsed)]]), []);
-    });
+  async save(value: Value, options?: RepositoryMutationOptions): Promise<void> {
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const parsed = this.schema.parse(value);
+        const storage = this.getStorage();
+        const raw = storage.getItem(this.keyName);
+        if (raw && valuesEqual(parseStoredValue(raw, this.schema, this.keyName), parsed)) {
+          return false;
+        }
+        mutateStorage(storage, new Map([[this.keyName, stored(parsed)]]), []);
+        return true;
+      },
+      { ...options, shouldAnnounce: Boolean },
+    );
   }
 
   async clear(): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateStorage(this.getStorage(), new Map(), [this.keyName]);
-    });
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const storage = this.getStorage();
+        if (storage.getItem(this.keyName) === null) return false;
+        mutateStorage(storage, new Map(), [this.keyName]);
+        return true;
+      },
+      {
+        reason: "value-cleared",
+        shouldAnnounce: Boolean,
+        syncPolicy: "immediate",
+      },
+    );
   }
 }
 
@@ -426,18 +457,35 @@ class LocalThemeRepository implements ValueRepository<Theme> {
     return result.data;
   }
 
-  async save(value: Theme): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateStorage(this.getStorage(), new Map([[themeStorageKey, themeSchema.parse(value)]]), []);
-    });
+  async save(value: Theme, options?: RepositoryMutationOptions): Promise<void> {
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const parsed = themeSchema.parse(value);
+        const storage = this.getStorage();
+        if (storage.getItem(themeStorageKey) === parsed) return false;
+        mutateStorage(storage, new Map([[themeStorageKey, parsed]]), []);
+        return true;
+      },
+      { ...options, shouldAnnounce: Boolean },
+    );
   }
 
   async clear(): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateStorage(this.getStorage(), new Map(), [themeStorageKey]);
-    });
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const storage = this.getStorage();
+        if (storage.getItem(themeStorageKey) === null) return false;
+        mutateStorage(storage, new Map(), [themeStorageKey]);
+        return true;
+      },
+      {
+        reason: "theme-cleared",
+        shouldAnnounce: Boolean,
+        syncPolicy: "immediate",
+      },
+    );
   }
 }
 
@@ -460,18 +508,37 @@ class LocalScopedCollectionRepository<Entity extends { id: string }>
   }
 
   async replaceAll(scopeId: string, entities: readonly Entity[]): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      const parsed = this.schema.parse(entities);
-      mutateStorage(this.getStorage(), new Map([[this.key(scopeId), stored(parsed)]]), []);
-    });
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const parsed = this.schema.parse(entities);
+        const storage = this.getStorage();
+        const key = this.key(scopeId);
+        const raw = storage.getItem(key);
+        if (raw && valuesEqual(parseStoredValue(raw, this.schema, key), parsed)) return false;
+        mutateStorage(storage, new Map([[key, stored(parsed)]]), []);
+        return true;
+      },
+      { shouldAnnounce: Boolean },
+    );
   }
 
   async clear(scopeId: string): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateStorage(this.getStorage(), new Map(), [this.key(scopeId)]);
-    });
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const storage = this.getStorage();
+        const key = this.key(scopeId);
+        if (storage.getItem(key) === null) return false;
+        mutateStorage(storage, new Map(), [key]);
+        return true;
+      },
+      {
+        reason: `${this.namespace}-cleared`,
+        shouldAnnounce: Boolean,
+        syncPolicy: "immediate",
+      },
+    );
   }
 
   private key(scopeId: string): string {
@@ -492,7 +559,7 @@ class LocalAwthorRepository implements AwthorRepository {
 
   constructor(private readonly getStorage: () => StorageLike) {
     const ready = () => this.requireReady();
-    const runMutation: MutationQueue = (operation) => this.runMutation(operation);
+    const runMutation: MutationQueue = (operation, options) => this.runMutation(operation, options);
     this.profile = new LocalValueRepository(
       profileKey,
       onboardingDetailsSchema,
@@ -609,23 +676,27 @@ class LocalAwthorRepository implements AwthorRepository {
   }
 
   async deleteBook(bookId: string): Promise<void> {
-    await this.runMutation(async () => {
-      const data = await this.getData();
-      if (!data.books.some((book) => book.id === bookId)) {
-        return;
-      }
+    await this.runMutation(
+      async () => {
+        const data = await this.getData();
+        if (!data.books.some((book) => book.id === bookId)) {
+          return false;
+        }
 
-      data.books = data.books.filter((book) => book.id !== bookId);
-      delete data.chapters[bookId];
-      delete data.characters[bookId];
-      delete data.settings.lastChapterByBook[bookId];
-      delete data.settings.readingPositionByBook[bookId];
-      delete data.settings.proofreadingByBook[bookId];
-      if (data.settings.activeBookId === bookId) {
-        data.settings.activeBookId = data.books[0]?.id ?? null;
-      }
-      await this.replaceDataRaw(data);
-    });
+        data.books = data.books.filter((book) => book.id !== bookId);
+        delete data.chapters[bookId];
+        delete data.characters[bookId];
+        delete data.settings.lastChapterByBook[bookId];
+        delete data.settings.readingPositionByBook[bookId];
+        delete data.settings.proofreadingByBook[bookId];
+        if (data.settings.activeBookId === bookId) {
+          data.settings.activeBookId = data.books[0]?.id ?? null;
+        }
+        await this.replaceDataRaw(data);
+        return true;
+      },
+      { reason: "book-deleted", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+    );
   }
 
   async createChapter(bookId: string, input: CreateChapterInput = {}): Promise<Chapter> {
@@ -713,28 +784,31 @@ class LocalAwthorRepository implements AwthorRepository {
   }
 
   async deleteChapter(bookId: string, chapterId: string): Promise<void> {
-    await this.runMutation(async () => {
-      const data = await this.getData();
-      const bookIndex = this.requireBookIndex(data, bookId);
-      const chapters = data.chapters[bookId] ?? [];
-      if (chapters.length <= 1) {
-        throw new RepositoryStorageError("A book must keep at least one chapter.");
-      }
-      if (!chapters.some((chapter) => chapter.id === chapterId)) {
-        throw new RepositoryStorageError("This chapter no longer exists on this device.");
-      }
+    await this.runMutation(
+      async () => {
+        const data = await this.getData();
+        const bookIndex = this.requireBookIndex(data, bookId);
+        const chapters = data.chapters[bookId] ?? [];
+        if (chapters.length <= 1) {
+          throw new RepositoryStorageError("A book must keep at least one chapter.");
+        }
+        if (!chapters.some((chapter) => chapter.id === chapterId)) {
+          throw new RepositoryStorageError("This chapter no longer exists on this device.");
+        }
 
-      const now = new Date().toISOString();
-      const remaining = chapters
-        .filter((chapter) => chapter.id !== chapterId)
-        .map((chapter, index) => chapterSchema.parse({ ...chapter, number: index + 1 }));
-      data.chapters[bookId] = remaining;
-      data.books[bookIndex] = aggregateBook(data.books[bookIndex], remaining, now);
-      if (data.settings.lastChapterByBook[bookId] === chapterId) {
-        data.settings.lastChapterByBook[bookId] = remaining[0].id;
-      }
-      await this.replaceDataRaw(data);
-    });
+        const now = new Date().toISOString();
+        const remaining = chapters
+          .filter((chapter) => chapter.id !== chapterId)
+          .map((chapter, index) => chapterSchema.parse({ ...chapter, number: index + 1 }));
+        data.chapters[bookId] = remaining;
+        data.books[bookIndex] = aggregateBook(data.books[bookIndex], remaining, now);
+        if (data.settings.lastChapterByBook[bookId] === chapterId) {
+          data.settings.lastChapterByBook[bookId] = remaining[0].id;
+        }
+        await this.replaceDataRaw(data);
+      },
+      { reason: "chapter-deleted", syncPolicy: "immediate" },
+    );
   }
 
   saveManuscript(
@@ -742,32 +816,40 @@ class LocalAwthorRepository implements AwthorRepository {
     chapterId: string,
     markdown: string,
   ): Promise<ManuscriptSaveResult> {
-    return this.runMutation(async () => {
-      const data = await this.getData();
-      const bookIndex = this.requireBookIndex(data, bookId);
-      const chapters = data.chapters[bookId] ?? [];
-      const chapterIndex = chapters.findIndex((chapter) => chapter.id === chapterId);
-      if (chapterIndex < 0) {
-        throw new RepositoryStorageError("This chapter no longer exists on this device.");
-      }
+    let mutated = false;
+    return this.runMutation(
+      async () => {
+        const data = await this.getData();
+        const bookIndex = this.requireBookIndex(data, bookId);
+        const chapters = data.chapters[bookId] ?? [];
+        const chapterIndex = chapters.findIndex((chapter) => chapter.id === chapterId);
+        if (chapterIndex < 0) {
+          throw new RepositoryStorageError("This chapter no longer exists on this device.");
+        }
+        if (chapters[chapterIndex].body === markdown) {
+          return { book: data.books[bookIndex], chapter: chapters[chapterIndex] };
+        }
 
-      const now = new Date().toISOString();
-      const chapter = chapterSchema.parse({
-        ...chapters[chapterIndex],
-        ...countManuscript(markdown),
-        body: markdown,
-        title: getLeadingMarkdownTitle(markdown) ?? chapters[chapterIndex].title,
-        updatedAt: now,
-      });
-      const nextChapters = chapters.map((value, index) =>
-        index === chapterIndex ? chapter : value,
-      );
-      const book = aggregateBook(data.books[bookIndex], nextChapters, now);
-      data.chapters[bookId] = nextChapters;
-      data.books[bookIndex] = book;
-      await this.replaceDataRaw(data);
-      return { book, chapter };
-    });
+        const now = new Date().toISOString();
+        const chapter = chapterSchema.parse({
+          ...chapters[chapterIndex],
+          ...countManuscript(markdown),
+          body: markdown,
+          title: getLeadingMarkdownTitle(markdown) ?? chapters[chapterIndex].title,
+          updatedAt: now,
+        });
+        const nextChapters = chapters.map((value, index) =>
+          index === chapterIndex ? chapter : value,
+        );
+        const book = aggregateBook(data.books[bookIndex], nextChapters, now);
+        data.chapters[bookId] = nextChapters;
+        data.books[bookIndex] = book;
+        await this.replaceDataRaw(data);
+        mutated = true;
+        return { book, chapter };
+      },
+      { reason: "manuscript-saved", shouldAnnounce: () => mutated },
+    );
   }
 
   async createCharacter(bookId: string, input: CreateCharacterInput): Promise<Character> {
@@ -804,14 +886,18 @@ class LocalAwthorRepository implements AwthorRepository {
   }
 
   async deleteCharacter(bookId: string, characterId: string): Promise<void> {
-    await this.runMutation(async () => {
-      const data = await this.getData();
-      this.requireBookIndex(data, bookId);
-      data.characters[bookId] = (data.characters[bookId] ?? []).filter(
-        (character) => character.id !== characterId,
-      );
-      await this.replaceDataRaw(data);
-    });
+    await this.runMutation(
+      async () => {
+        const data = await this.getData();
+        this.requireBookIndex(data, bookId);
+        const characters = data.characters[bookId] ?? [];
+        if (!characters.some((character) => character.id === characterId)) return false;
+        data.characters[bookId] = characters.filter((character) => character.id !== characterId);
+        await this.replaceDataRaw(data);
+        return true;
+      },
+      { reason: "character-deleted", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+    );
   }
 
   async getData(): Promise<RepositoryData> {
@@ -860,22 +946,29 @@ class LocalAwthorRepository implements AwthorRepository {
   }
 
   async replaceData(data: RepositoryData): Promise<void> {
-    await this.runMutation(async () => {
-      await this.requireReady();
-      await this.replaceDataRaw(data);
-    });
+    await this.runMutation(
+      async () => {
+        await this.requireReady();
+        await this.replaceDataRaw(data);
+      },
+      { reason: "repository-replaced", syncPolicy: "immediate" },
+    );
   }
 
   async clearAll(): Promise<void> {
-    await this.runMutation(async () => {
-      const storage = this.getStorage();
-      const keys = listStorageKeys(storage).filter(
-        (key) =>
-          key === themeStorageKey || key === legacyProfileStorageKey || key.startsWith("awthor:"),
-      );
-      mutateStorage(storage, new Map(), keys);
-      this.initialization = undefined;
-    });
+    await this.runMutation(
+      async () => {
+        const storage = this.getStorage();
+        const keys = listStorageKeys(storage).filter(
+          (key) =>
+            key === themeStorageKey || key === legacyProfileStorageKey || key.startsWith("awthor:"),
+        );
+        mutateStorage(storage, new Map(), keys);
+        this.initialization = undefined;
+        return keys.length > 0;
+      },
+      { reason: "repository-cleared", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+    );
   }
 
   async exportBackup(): Promise<AwthorBackupV2> {
@@ -890,7 +983,10 @@ class LocalAwthorRepository implements AwthorRepository {
   async importBackup(backup: unknown): Promise<BackupImportResult> {
     const parsedV2 = backupV2Schema.safeParse(backup);
     if (parsedV2.success) {
-      await this.runMutation(() => this.replaceDataRaw(parsedV2.data.data));
+      await this.runMutation(() => this.replaceDataRaw(parsedV2.data.data), {
+        reason: "backup-imported",
+        syncPolicy: "immediate",
+      });
       this.initialization = Promise.resolve({
         status: "not-needed",
         retryable: false,
@@ -907,7 +1003,10 @@ class LocalAwthorRepository implements AwthorRepository {
     }
 
     const migrated = parseLegacyEntries(parsedV1.data.entries);
-    await this.runMutation(() => this.replaceDataRaw(migrated.data));
+    await this.runMutation(() => this.replaceDataRaw(migrated.data), {
+      reason: "backup-imported",
+      syncPolicy: "immediate",
+    });
     this.initialization = Promise.resolve({
       status: "not-needed",
       retryable: false,
@@ -979,13 +1078,21 @@ class LocalAwthorRepository implements AwthorRepository {
     return index;
   }
 
-  private runMutation<Value>(operation: () => Promise<Value>): Promise<Value> {
+  private runMutation<Value>(
+    operation: () => Promise<Value>,
+    options: MutationQueueOptions<Value> = {},
+  ): Promise<Value> {
     const result = this.mutationTail.then(operation, operation);
     this.mutationTail = result.then(
       () => undefined,
       () => undefined,
     );
-    return result;
+    return result.then((value) => {
+      if (options.shouldAnnounce?.(value) ?? true) {
+        announceRepositoryMutation(options);
+      }
+      return value;
+    });
   }
 }
 

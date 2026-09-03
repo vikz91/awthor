@@ -98,14 +98,17 @@ export function BackupReminder() {
       }
 
       const shownAt = new Date().toISOString();
-      await repository.settings.save({
-        ...latestSettings,
-        backupReminder: {
-          enabled: true,
-          frequency: "weekly",
-          lastShownAt: shownAt,
+      await repository.settings.save(
+        {
+          ...latestSettings,
+          backupReminder: {
+            enabled: true,
+            frequency: "weekly",
+            lastShownAt: shownAt,
+          },
         },
-      });
+        { syncPolicy: "local-only", reason: "backup-reminder" },
+      );
 
       if (active) {
         setDue(false);

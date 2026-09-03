@@ -7,6 +7,7 @@ import {
   type StorageLike,
 } from "./local-repository";
 import { resolveBookProofreadingSettings } from "./models";
+import { readRepositoryMutation, repositoryMutatedEventName } from "./mutation-events";
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -96,6 +97,49 @@ function storageWith(entries: Record<string, string>): MemoryStorage {
 }
 
 describe("local repository v2", () => {
+  test("honors sync policy and does not announce an identical settings save", async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const eventTarget = new EventTarget();
+    const mutations: Event[] = [];
+    eventTarget.addEventListener(repositoryMutatedEventName, (event) => mutations.push(event));
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: eventTarget,
+    });
+
+    try {
+      const storage = new MemoryStorage();
+      const repository = createLocalAwthorRepository(() => storage);
+      await repository.initialize();
+      await repository.createBook({ title: "Quiet saves", author: "A. Writer" });
+      const settings = await repository.settings.get();
+      if (!settings) throw new Error("Expected default settings.");
+      mutations.length = 0;
+
+      const changed = {
+        ...settings,
+        readingPositionByBook: { "book-1": 0.25 },
+      };
+      await repository.settings.save(changed, {
+        reason: "reading-position",
+        syncPolicy: "local-only",
+      });
+      await repository.settings.save(changed, { syncPolicy: "immediate" });
+
+      expect(mutations).toHaveLength(1);
+      expect(readRepositoryMutation(mutations[0])).toEqual({
+        reason: "reading-position",
+        syncPolicy: "local-only",
+      });
+    } finally {
+      if (previousWindow) {
+        Object.defineProperty(globalThis, "window", previousWindow);
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
+  });
+
   test("migrates supported data, defaults chapter arcs, then deletes v1 notes and plots", async () => {
     const storage = storageWith(legacyEntries());
     const repository = createLocalAwthorRepository(() => storage);

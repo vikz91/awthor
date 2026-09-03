@@ -5,7 +5,6 @@ import {
   Database,
   HardDrive,
   Library,
-  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -16,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppTopBar } from "@/components/app-top-bar";
 import { BookCover } from "@/components/book-cover";
 import { BrandMark } from "@/components/brand-mark";
@@ -52,6 +51,7 @@ import {
 } from "@/lib/repository";
 import { readRepositoryChange, repositoryChangedEventName } from "@/lib/webmcp/workspace-bridge";
 import { BookManagementDialog, DeleteBookDialog } from "./book-management-dialog";
+import styles from "./books-library.module.css";
 
 const repository = getAwthorRepository();
 
@@ -105,11 +105,7 @@ export function BooksLibraryFallback() {
       />
       <main className="mx-auto w-full max-w-[92rem] px-5 pt-[calc(9rem+env(safe-area-inset-top))] pb-16 sm:px-8 lg:pt-28">
         <div className="h-10 w-48 animate-pulse rounded-xl bg-muted" />
-        <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {["first", "second", "third", "fourth", "fifth"].map((key) => (
-            <div className="aspect-[2/3] animate-pulse rounded-2xl bg-muted" key={key} />
-          ))}
-        </div>
+        <LibraryLoading />
       </main>
     </div>
   );
@@ -391,23 +387,16 @@ export function BooksLibrary() {
 
         {loadState.status === "ready" && filteredBooks.length > 0 && (
           <div className="mt-10 space-y-12">
-            {groupedBooks.map(([group, groupBooks]) => (
-              <section aria-labelledby={`group-${groupBooks[0].id}`} key={group}>
-                <h2 className="text-sm font-semibold" id={`group-${groupBooks[0].id}`}>
-                  {group === "Standalone" ? group : `${group} series`}
-                </h2>
-                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-3 sm:gap-x-7 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-                  {groupBooks.map((book) => (
-                    <BookCard
-                      book={book}
-                      key={book.id}
-                      onDelete={() => setDeletingBook(book)}
-                      onEdit={() => openEditBook(book)}
-                      readingProgress={readingProgressByBook[book.id]}
-                    />
-                  ))}
-                </div>
-              </section>
+            {groupedBooks.map(([group, groupBooks], groupIndex) => (
+              <SeriesRack
+                books={groupBooks}
+                group={group}
+                isFirst={groupIndex === 0}
+                key={group}
+                onDelete={setDeletingBook}
+                onEdit={openEditBook}
+                readingProgressByBook={readingProgressByBook}
+              />
             ))}
           </div>
         )}
@@ -439,6 +428,85 @@ export function BooksLibrary() {
         open={Boolean(deletingBook)}
       />
     </div>
+  );
+}
+
+function SeriesRack({
+  books,
+  group,
+  isFirst,
+  onDelete,
+  onEdit,
+  readingProgressByBook,
+}: {
+  books: Book[];
+  group: string;
+  isFirst: boolean;
+  onDelete: (book: Book) => void;
+  onEdit: (book: Book) => void;
+  readingProgressByBook: Record<string, ReadingProgress>;
+}) {
+  const rackRef = useRef<HTMLElement>(null);
+  const [isRevealed, setIsRevealed] = useState(false);
+
+  useEffect(() => {
+    const rack = rackRef.current;
+    if (!rack) {
+      return;
+    }
+
+    if (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      setIsRevealed(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setIsRevealed(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.08 },
+    );
+
+    observer.observe(rack);
+    return () => observer.disconnect();
+  }, []);
+
+  const headingId = `group-${books[0].id}`;
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      className={styles.seriesRack}
+      data-first={isFirst}
+      data-revealed={isRevealed}
+      ref={rackRef}
+    >
+      <h2 className="text-sm font-semibold" id={headingId}>
+        {group === "Standalone" ? group : `${group} series`}
+      </h2>
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-3 sm:gap-x-7 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        {books.map((book, bookIndex) => (
+          <div
+            className={styles.bookEntrance}
+            key={book.id}
+            style={{ "--book-order": Math.min(bookIndex, 8) } as CSSProperties}
+          >
+            <BookCard
+              book={book}
+              onDelete={() => onDelete(book)}
+              onEdit={() => onEdit(book)}
+              readingProgress={readingProgressByBook[book.id]}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -746,10 +814,17 @@ async function loadReadingProgress(books: readonly Book[], settings: AppSettings
 
 function LibraryLoading() {
   return (
-    <div aria-live="polite" className="mt-20 flex flex-col items-center text-muted-foreground">
-      <LoaderCircle aria-hidden="true" className="size-6 animate-spin" />
+    <output aria-live="polite" className="mt-20 flex flex-col items-center text-muted-foreground">
+      <div aria-hidden="true" className={styles.turningBook}>
+        <span className={styles.leftPage} />
+        <span className={styles.rightPage} />
+        <span className={styles.bookSpine} />
+        {[0, 1, 2, 3].map((page) => (
+          <span className={styles.turningPage} key={page} />
+        ))}
+      </div>
       <p className="mt-3 text-sm">Opening your local library…</p>
-    </div>
+    </output>
   );
 }
 

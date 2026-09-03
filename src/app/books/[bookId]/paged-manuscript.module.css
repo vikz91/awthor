@@ -1,0 +1,30 @@
+.runningHeader {
+  position: absolute;
+  top: clamp(0.9rem, 4%, 2rem);
+  right: var(--manuscript-page-padding-inline);
+  left: var(--manuscript-page-padding-inline);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: baseline;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  padding-bottom: 0.55rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-nunito);
+  font-size: clamp(0.5rem, 1vw, 0.65rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.runningBookTitle,
+.runningChapterTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runningChapterTitle {
+  text-align: right;
+}

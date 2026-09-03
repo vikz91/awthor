@@ -14,6 +14,7 @@ import {
   type ManuscriptSaveResult,
   type MigrationResult,
   type RepositoryData,
+  type RepositoryMutationOptions,
   type ScopedCollectionRepository,
   type UpdateBookInput,
   type UpdateChapterInput,
@@ -44,6 +45,7 @@ import {
   type Theme,
   themeSchema,
 } from "./models";
+import { announceRepositoryMutation } from "./mutation-events";
 
 export const indexedDbRepositorySchemaVersion = 3;
 export const indexedDbRepositoryPrefix = `awthor:repository:v${indexedDbRepositorySchemaVersion}`;
@@ -64,7 +66,13 @@ const storeNames = {
 } as const;
 
 type StoreName = (typeof storeNames)[keyof typeof storeNames];
-type MutationQueue = <Value>(operation: () => Promise<Value>) => Promise<Value>;
+type MutationQueueOptions<Value> = RepositoryMutationOptions & {
+  shouldAnnounce?: (value: Value) => boolean;
+};
+type MutationQueue = <Value>(
+  operation: () => Promise<Value>,
+  options?: MutationQueueOptions<Value>,
+) => Promise<Value>;
 
 type StoredEnvelope = {
   schemaVersion: number;
@@ -76,7 +84,7 @@ type StoredChapter = Chapter & { bookId: string };
 type StoredCharacter = Character & { bookId: string };
 type RepositoryDeletedRecord = {
   recordId: string;
-  recordType: "book" | "chapter" | "character";
+  recordType: "book" | "chapter" | "character" | "progress";
 };
 type BookSettingsRecord = {
   bookId: string;
@@ -135,6 +143,19 @@ function stored(payload: unknown): string {
     savedAt: new Date().toISOString(),
     payload,
   } satisfies StoredEnvelope);
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function entityCollectionsEqual<Entity extends { id: string }>(
+  left: readonly Entity[],
+  right: readonly Entity[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const rightById = new Map(right.map((entity) => [entity.id, entity]));
+  return left.every((entity) => valuesEqual(entity, rightById.get(entity.id)));
 }
 
 function parseStoredValue<Value>(raw: string, schema: ZodType<Value>, key: string): Value {
@@ -481,22 +502,38 @@ class LocalValueRepository<Value> implements ValueRepository<Value> {
     return raw ? parseStoredValue(raw, this.schema, this.keyName) : null;
   }
 
-  async save(value: Value): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateLocalStorage(
-        this.getStorage(),
-        new Map([[this.keyName, stored(this.schema.parse(value))]]),
-        [],
-      );
-    });
+  async save(value: Value, options?: RepositoryMutationOptions): Promise<void> {
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const parsed = this.schema.parse(value);
+        const storage = this.getStorage();
+        const raw = storage.getItem(this.keyName);
+        if (raw && valuesEqual(parseStoredValue(raw, this.schema, this.keyName), parsed)) {
+          return false;
+        }
+        mutateLocalStorage(storage, new Map([[this.keyName, stored(parsed)]]), []);
+        return true;
+      },
+      { ...options, shouldAnnounce: Boolean },
+    );
   }
 
   async clear(): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateLocalStorage(this.getStorage(), new Map(), [this.keyName]);
-    });
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const storage = this.getStorage();
+        if (storage.getItem(this.keyName) === null) return false;
+        mutateLocalStorage(storage, new Map(), [this.keyName]);
+        return true;
+      },
+      {
+        reason: "value-cleared",
+        shouldAnnounce: Boolean,
+        syncPolicy: "immediate",
+      },
+    );
   }
 }
 
@@ -513,22 +550,35 @@ class HybridThemeRepository implements ValueRepository<Theme> {
     return parsed.success ? parsed.data : null;
   }
 
-  async save(value: Theme): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateLocalStorage(
-        this.getStorage(),
-        new Map([[themeStorageKey, themeSchema.parse(value)]]),
-        [],
-      );
-    });
+  async save(value: Theme, options?: RepositoryMutationOptions): Promise<void> {
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const parsed = themeSchema.parse(value);
+        const storage = this.getStorage();
+        if (storage.getItem(themeStorageKey) === parsed) return false;
+        mutateLocalStorage(storage, new Map([[themeStorageKey, parsed]]), []);
+        return true;
+      },
+      { ...options, shouldAnnounce: Boolean },
+    );
   }
 
   async clear(): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      mutateLocalStorage(this.getStorage(), new Map(), [themeStorageKey]);
-    });
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const storage = this.getStorage();
+        if (storage.getItem(themeStorageKey) === null) return false;
+        mutateLocalStorage(storage, new Map(), [themeStorageKey]);
+        return true;
+      },
+      {
+        reason: "theme-cleared",
+        shouldAnnounce: Boolean,
+        syncPolicy: "immediate",
+      },
+    );
   }
 }
 
@@ -562,20 +612,52 @@ class IndexedDbCollectionRepository<Entity extends { id: string }>
   }
 
   async replaceAll(scopeId: string, entities: readonly Entity[]): Promise<void> {
-    await this.runMutation(async () => {
-      await this.ready();
-      const parsed = this.schema.parse(entities);
-      await replaceScopedStore(
-        await this.database(),
-        this.storeName,
-        scopeId,
-        parsed.map((entity) => ({ ...entity, bookId: scopeId })),
-      );
-    });
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const parsed = this.schema.parse(entities);
+        const database = await this.database();
+        const storedEntities = await getScoped<Entity & { bookId: string }>(
+          database,
+          this.storeName,
+          scopeId,
+        );
+        const current = this.schema.parse(
+          storedEntities.map(({ bookId: _bookId, ...entity }) => entity),
+        );
+        if (entityCollectionsEqual(current, parsed)) return false;
+        await replaceScopedStore(
+          database,
+          this.storeName,
+          scopeId,
+          parsed.map((entity) => ({ ...entity, bookId: scopeId })),
+        );
+        return true;
+      },
+      { shouldAnnounce: Boolean },
+    );
   }
 
   async clear(scopeId: string): Promise<void> {
-    await this.replaceAll(scopeId, []);
+    await this.runMutation(
+      async () => {
+        await this.ready();
+        const database = await this.database();
+        const current = await getScoped<Entity & { bookId: string }>(
+          database,
+          this.storeName,
+          scopeId,
+        );
+        if (current.length === 0) return false;
+        await replaceScopedStore(database, this.storeName, scopeId, []);
+        return true;
+      },
+      {
+        reason: `${this.storeName}-cleared`,
+        shouldAnnounce: Boolean,
+        syncPolicy: "immediate",
+      },
+    );
   }
 }
 
@@ -593,7 +675,7 @@ class IndexedDbAwthorRepository implements AwthorRepository {
 
   constructor(private readonly options: Required<IndexedDbAwthorRepositoryOptions>) {
     const ready = () => this.requireReady();
-    const runMutation: MutationQueue = (operation) => this.runMutation(operation);
+    const runMutation: MutationQueue = (operation, options) => this.runMutation(operation, options);
     const database = () => this.database();
 
     this.profile = new LocalValueRepository(
@@ -609,17 +691,31 @@ class IndexedDbAwthorRepository implements AwthorRepository {
         await ready();
         return bookSchema.array().parse(await getAll<Book>(await database(), storeNames.books));
       },
-      save: async (books) => {
-        await runMutation(async () => {
-          await ready();
-          await replaceStore(await database(), storeNames.books, bookSchema.array().parse(books));
-        });
+      save: async (books, mutationOptions) => {
+        await runMutation(
+          async () => {
+            await ready();
+            const parsed = bookSchema.array().parse(books);
+            const db = await database();
+            const current = bookSchema.array().parse(await getAll<Book>(db, storeNames.books));
+            if (entityCollectionsEqual(current, parsed)) return false;
+            await replaceStore(db, storeNames.books, parsed);
+            return true;
+          },
+          { ...mutationOptions, shouldAnnounce: Boolean },
+        );
       },
       clear: async () => {
-        await runMutation(async () => {
-          await ready();
-          await replaceStore(await database(), storeNames.books, []);
-        });
+        await runMutation(
+          async () => {
+            await ready();
+            const db = await database();
+            if ((await getAll<Book>(db, storeNames.books)).length === 0) return false;
+            await replaceStore(db, storeNames.books, []);
+            return true;
+          },
+          { reason: "books-cleared", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+        );
       },
     };
     this.settings = {
@@ -627,18 +723,30 @@ class IndexedDbAwthorRepository implements AwthorRepository {
         await ready();
         return this.readSettingsRaw();
       },
-      save: async (settings) => {
-        await runMutation(async () => {
-          await ready();
-          await this.saveSettingsRaw(settings);
-        });
+      save: async (settings, mutationOptions) => {
+        await runMutation(
+          async () => {
+            await ready();
+            const parsed = appSettingsSchema.parse(settings);
+            if (valuesEqual(await this.readSettingsRaw(), parsed)) return false;
+            await this.saveSettingsRaw(parsed);
+            return true;
+          },
+          { ...mutationOptions, shouldAnnounce: Boolean },
+        );
       },
       clear: async () => {
-        await runMutation(async () => {
-          await ready();
-          mutateLocalStorage(options.getStorage(), new Map(), [settingsKey]);
-          await replaceStore(await database(), storeNames.bookSettings, []);
-        });
+        await runMutation(
+          async () => {
+            await ready();
+            const current = await this.readSettingsRaw();
+            if (valuesEqual(current, appSettingsSchema.parse({}))) return false;
+            mutateLocalStorage(options.getStorage(), new Map(), [settingsKey]);
+            await replaceStore(await database(), storeNames.bookSettings, []);
+            return true;
+          },
+          { reason: "settings-cleared", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+        );
       },
     };
     this.chapters = new IndexedDbCollectionRepository(
@@ -732,34 +840,39 @@ class IndexedDbAwthorRepository implements AwthorRepository {
 
   async deleteBook(bookId: string): Promise<void> {
     const deletedRecords: RepositoryDeletedRecord[] = [];
-    await this.runMutation(async () => {
-      await this.requireReady();
-      const data = await this.getDataRaw();
-      if (!data.books.some((book) => book.id === bookId)) {
-        return;
-      }
-      deletedRecords.push(
-        { recordId: bookId, recordType: "book" },
-        ...(data.chapters[bookId] ?? []).map((chapter) => ({
-          recordId: `${bookId}:${chapter.id}`,
-          recordType: "chapter" as const,
-        })),
-        ...(data.characters[bookId] ?? []).map((character) => ({
-          recordId: `${bookId}:${character.id}`,
-          recordType: "character" as const,
-        })),
-      );
-      data.books = data.books.filter((book) => book.id !== bookId);
-      delete data.chapters[bookId];
-      delete data.characters[bookId];
-      delete data.settings.lastChapterByBook[bookId];
-      delete data.settings.readingPositionByBook[bookId];
-      delete data.settings.proofreadingByBook[bookId];
-      if (data.settings.activeBookId === bookId) {
-        data.settings.activeBookId = data.books[0]?.id ?? null;
-      }
-      await this.replaceDataRaw(data);
-    });
+    await this.runMutation(
+      async () => {
+        await this.requireReady();
+        const data = await this.getDataRaw();
+        if (!data.books.some((book) => book.id === bookId)) {
+          return false;
+        }
+        deletedRecords.push(
+          { recordId: bookId, recordType: "book" },
+          { recordId: bookId, recordType: "progress" },
+          ...(data.chapters[bookId] ?? []).map((chapter) => ({
+            recordId: `${bookId}:${chapter.id}`,
+            recordType: "chapter" as const,
+          })),
+          ...(data.characters[bookId] ?? []).map((character) => ({
+            recordId: `${bookId}:${character.id}`,
+            recordType: "character" as const,
+          })),
+        );
+        data.books = data.books.filter((book) => book.id !== bookId);
+        delete data.chapters[bookId];
+        delete data.characters[bookId];
+        delete data.settings.lastChapterByBook[bookId];
+        delete data.settings.readingPositionByBook[bookId];
+        delete data.settings.proofreadingByBook[bookId];
+        if (data.settings.activeBookId === bookId) {
+          data.settings.activeBookId = data.books[0]?.id ?? null;
+        }
+        await this.replaceDataRaw(data);
+        return true;
+      },
+      { reason: "book-deleted", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+    );
     announceDeletedRecords(deletedRecords);
   }
 
@@ -849,28 +962,31 @@ class IndexedDbAwthorRepository implements AwthorRepository {
   }
 
   async deleteChapter(bookId: string, chapterId: string): Promise<void> {
-    await this.runMutation(async () => {
-      await this.requireReady();
-      const data = await this.getDataRaw();
-      const bookIndex = this.requireBookIndex(data, bookId);
-      const chapters = data.chapters[bookId] ?? [];
-      if (chapters.length <= 1) {
-        throw new RepositoryStorageError("A book must keep at least one chapter.");
-      }
-      if (!chapters.some((chapter) => chapter.id === chapterId)) {
-        throw new RepositoryStorageError("This chapter no longer exists on this device.");
-      }
-      const now = new Date().toISOString();
-      const remaining = chapters
-        .filter((chapter) => chapter.id !== chapterId)
-        .map((chapter, index) => chapterSchema.parse({ ...chapter, number: index + 1 }));
-      data.chapters[bookId] = remaining;
-      data.books[bookIndex] = aggregateBook(data.books[bookIndex], remaining, now);
-      if (data.settings.lastChapterByBook[bookId] === chapterId) {
-        data.settings.lastChapterByBook[bookId] = remaining[0].id;
-      }
-      await this.replaceDataRaw(data);
-    });
+    await this.runMutation(
+      async () => {
+        await this.requireReady();
+        const data = await this.getDataRaw();
+        const bookIndex = this.requireBookIndex(data, bookId);
+        const chapters = data.chapters[bookId] ?? [];
+        if (chapters.length <= 1) {
+          throw new RepositoryStorageError("A book must keep at least one chapter.");
+        }
+        if (!chapters.some((chapter) => chapter.id === chapterId)) {
+          throw new RepositoryStorageError("This chapter no longer exists on this device.");
+        }
+        const now = new Date().toISOString();
+        const remaining = chapters
+          .filter((chapter) => chapter.id !== chapterId)
+          .map((chapter, index) => chapterSchema.parse({ ...chapter, number: index + 1 }));
+        data.chapters[bookId] = remaining;
+        data.books[bookIndex] = aggregateBook(data.books[bookIndex], remaining, now);
+        if (data.settings.lastChapterByBook[bookId] === chapterId) {
+          data.settings.lastChapterByBook[bookId] = remaining[0].id;
+        }
+        await this.replaceDataRaw(data);
+      },
+      { reason: "chapter-deleted", syncPolicy: "immediate" },
+    );
     announceDeletedRecords([{ recordId: `${bookId}:${chapterId}`, recordType: "chapter" }]);
   }
 
@@ -879,46 +995,55 @@ class IndexedDbAwthorRepository implements AwthorRepository {
     chapterId: string,
     markdown: string,
   ): Promise<ManuscriptSaveResult> {
-    return this.runMutation(async () => {
-      await this.requireReady();
-      const database = await this.database();
-      const booksTransaction = database.transaction(storeNames.books, "readonly");
-      const booksDone = transactionDone(booksTransaction);
-      const book = bookSchema.parse(
-        await requestResult(booksTransaction.objectStore(storeNames.books).get(bookId)),
-      );
-      await booksDone;
-      const storedChapters = storedChapterSchema
-        .array()
-        .parse(await getScoped<StoredChapter>(database, storeNames.chapters, bookId));
-      const chapterIndex = storedChapters.findIndex((chapter) => chapter.id === chapterId);
-      if (chapterIndex < 0) {
-        throw new RepositoryStorageError("This chapter no longer exists on this device.");
-      }
+    let mutated = false;
+    return this.runMutation(
+      async () => {
+        await this.requireReady();
+        const database = await this.database();
+        const booksTransaction = database.transaction(storeNames.books, "readonly");
+        const booksDone = transactionDone(booksTransaction);
+        const book = bookSchema.parse(
+          await requestResult(booksTransaction.objectStore(storeNames.books).get(bookId)),
+        );
+        await booksDone;
+        const storedChapters = storedChapterSchema
+          .array()
+          .parse(await getScoped<StoredChapter>(database, storeNames.chapters, bookId));
+        const chapterIndex = storedChapters.findIndex((chapter) => chapter.id === chapterId);
+        if (chapterIndex < 0) {
+          throw new RepositoryStorageError("This chapter no longer exists on this device.");
+        }
+        if (storedChapters[chapterIndex].body === markdown) {
+          const { bookId: _bookId, ...storedChapter } = storedChapters[chapterIndex];
+          return { book, chapter: chapterSchema.parse(storedChapter) };
+        }
 
-      const now = new Date().toISOString();
-      const chapter = chapterSchema.parse({
-        ...storedChapters[chapterIndex],
-        ...countManuscript(markdown),
-        body: markdown,
-        title: getLeadingMarkdownTitle(markdown) ?? storedChapters[chapterIndex].title,
-        updatedAt: now,
-      });
-      const chapters = storedChapters.map(({ bookId: _bookId, ...value }, index) =>
-        index === chapterIndex ? chapter : chapterSchema.parse(value),
-      );
-      const updatedBook = aggregateBook(book, chapters, now);
+        const now = new Date().toISOString();
+        const chapter = chapterSchema.parse({
+          ...storedChapters[chapterIndex],
+          ...countManuscript(markdown),
+          body: markdown,
+          title: getLeadingMarkdownTitle(markdown) ?? storedChapters[chapterIndex].title,
+          updatedAt: now,
+        });
+        const chapters = storedChapters.map(({ bookId: _bookId, ...value }, index) =>
+          index === chapterIndex ? chapter : chapterSchema.parse(value),
+        );
+        const updatedBook = aggregateBook(book, chapters, now);
 
-      const transaction = database.transaction(
-        [storeNames.books, storeNames.chapters],
-        "readwrite",
-      );
-      const done = transactionDone(transaction);
-      transaction.objectStore(storeNames.books).put(updatedBook);
-      transaction.objectStore(storeNames.chapters).put({ ...chapter, bookId });
-      await done;
-      return { book: updatedBook, chapter };
-    });
+        const transaction = database.transaction(
+          [storeNames.books, storeNames.chapters],
+          "readwrite",
+        );
+        const done = transactionDone(transaction);
+        transaction.objectStore(storeNames.books).put(updatedBook);
+        transaction.objectStore(storeNames.chapters).put({ ...chapter, bookId });
+        await done;
+        mutated = true;
+        return { book: updatedBook, chapter };
+      },
+      { reason: "manuscript-saved", shouldAnnounce: () => mutated },
+    );
   }
 
   async createCharacter(bookId: string, input: CreateCharacterInput): Promise<Character> {
@@ -958,15 +1083,20 @@ class IndexedDbAwthorRepository implements AwthorRepository {
 
   async deleteCharacter(bookId: string, characterId: string): Promise<void> {
     let deleted = false;
-    await this.runMutation(async () => {
-      await this.requireReady();
-      const data = await this.getDataRaw();
-      this.requireBookIndex(data, bookId);
-      const characters = data.characters[bookId] ?? [];
-      deleted = characters.some((character) => character.id === characterId);
-      data.characters[bookId] = characters.filter((character) => character.id !== characterId);
-      await this.replaceDataRaw(data);
-    });
+    await this.runMutation(
+      async () => {
+        await this.requireReady();
+        const data = await this.getDataRaw();
+        this.requireBookIndex(data, bookId);
+        const characters = data.characters[bookId] ?? [];
+        deleted = characters.some((character) => character.id === characterId);
+        if (!deleted) return false;
+        data.characters[bookId] = characters.filter((character) => character.id !== characterId);
+        await this.replaceDataRaw(data);
+        return true;
+      },
+      { reason: "character-deleted", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+    );
     if (deleted) {
       announceDeletedRecords([{ recordId: `${bookId}:${characterId}`, recordType: "character" }]);
     }
@@ -978,30 +1108,44 @@ class IndexedDbAwthorRepository implements AwthorRepository {
   }
 
   async replaceData(data: RepositoryData): Promise<void> {
-    await this.runMutation(async () => {
-      await this.requireReady();
-      await this.replaceDataRaw(data);
-    });
+    await this.runMutation(
+      async () => {
+        await this.requireReady();
+        await this.replaceDataRaw(data);
+      },
+      { reason: "repository-replaced", syncPolicy: "immediate" },
+    );
   }
 
   async clearAll(): Promise<void> {
-    await this.runMutation(async () => {
-      const database = await this.database();
-      const transaction = database.transaction(Object.values(storeNames), "readwrite");
-      const done = transactionDone(transaction);
-      for (const name of Object.values(storeNames)) {
-        transaction.objectStore(name).clear();
-      }
-      await done;
+    await this.runMutation(
+      async () => {
+        const existingData = await this.getDataRaw();
+        const hasData =
+          existingData.profile !== null ||
+          existingData.books.length > 0 ||
+          this.options.getStorage().getItem(themeStorageKey) !== null ||
+          this.options.getStorage().getItem(settingsKey) !== null;
+        if (!hasData) return false;
+        const database = await this.database();
+        const transaction = database.transaction(Object.values(storeNames), "readwrite");
+        const done = transactionDone(transaction);
+        for (const name of Object.values(storeNames)) {
+          transaction.objectStore(name).clear();
+        }
+        await done;
 
-      const storage = this.options.getStorage();
-      const removals = listStorageKeys(storage).filter(
-        (key) =>
-          key === themeStorageKey || key === legacyProfileStorageKey || key.startsWith("awthor:"),
-      );
-      mutateLocalStorage(storage, new Map(), removals);
-      this.initialization = undefined;
-    });
+        const storage = this.options.getStorage();
+        const removals = listStorageKeys(storage).filter(
+          (key) =>
+            key === themeStorageKey || key === legacyProfileStorageKey || key.startsWith("awthor:"),
+        );
+        mutateLocalStorage(storage, new Map(), removals);
+        this.initialization = undefined;
+        return true;
+      },
+      { reason: "repository-cleared", shouldAnnounce: Boolean, syncPolicy: "immediate" },
+    );
   }
 
   async exportBackup(): Promise<AwthorBackupV2> {
@@ -1208,15 +1352,18 @@ class IndexedDbAwthorRepository implements AwthorRepository {
     return index;
   }
 
-  private runMutation<Value>(operation: () => Promise<Value>): Promise<Value> {
+  private runMutation<Value>(
+    operation: () => Promise<Value>,
+    options: MutationQueueOptions<Value> = {},
+  ): Promise<Value> {
     const result = this.mutationTail.then(operation, operation);
     this.mutationTail = result.then(
       () => undefined,
       () => undefined,
     );
     return result.then((value) => {
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("awthor:repository-mutated"));
+      if (options.shouldAnnounce?.(value) ?? true) {
+        announceRepositoryMutation(options);
       }
       return value;
     });

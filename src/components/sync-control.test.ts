@@ -3,6 +3,7 @@ import {
   initialNavbarSyncFeedback,
   navbarSyncSuccessDurationMs,
   reduceNavbarSyncFeedback,
+  shouldMarkRepositoryMutationPending,
   shouldShowNavbarSyncOnMobile,
 } from "./sync-control";
 
@@ -84,5 +85,27 @@ describe("navbar sync feedback", () => {
         status: "idle",
       }),
     ).toBe(true);
+  });
+
+  test("does not mark device-local mutations as pending cloud work", () => {
+    expect(
+      shouldMarkRepositoryMutationPending(
+        new CustomEvent("awthor:repository-mutated", {
+          detail: { reason: "reading-position", syncPolicy: "local-only" },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("marks deferred, immediate, and legacy mutations as pending", () => {
+    for (const syncPolicy of ["deferred", "immediate"] as const) {
+      expect(
+        shouldMarkRepositoryMutationPending(
+          new CustomEvent("awthor:repository-mutated", { detail: { syncPolicy } }),
+        ),
+      ).toBe(true);
+    }
+
+    expect(shouldMarkRepositoryMutationPending(new Event("awthor:repository-mutated"))).toBe(true);
   });
 });

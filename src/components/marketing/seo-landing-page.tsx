@@ -1,9 +1,14 @@
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, Check, Code2, ExternalLink, HardDrive, ShieldCheck } from "lucide-react";
-import Image from "next/image";
+import { ArrowRight, Check, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BrandMark } from "@/components/brand-mark";
+import {
+  PublicActions,
+  PublicCta,
+  PublicFooter,
+  PublicNavbar,
+  PublicScreenshotPlate,
+} from "@/components/marketing/public-site";
 import { GITHUB_URL, SoftwareApplicationJsonLd } from "@/lib/seo";
 
 export type MarketingFeature = {
@@ -73,80 +78,48 @@ export function SeoLandingPage({
   title,
 }: SeoLandingPageProps) {
   return (
-    <div className="min-h-screen overflow-hidden bg-background text-foreground transition-colors">
+    <div className="awthor-landing public-seo-page min-h-screen overflow-clip bg-background text-foreground transition-colors">
       <SoftwareApplicationJsonLd />
-      <MarketingHeader />
+      <PublicNavbar />
 
       <main>
-        <section className="relative isolate">
-          <div
-            aria-hidden="true"
-            className="absolute -top-36 left-1/2 -z-10 h-[620px] w-[960px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl"
-          />
+        <section className="relative isolate border-b border-border">
           <div className="mx-auto grid w-full max-w-7xl items-center gap-14 px-5 pt-16 pb-20 sm:px-8 sm:pt-24 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20 lg:px-12 lg:pt-28 lg:pb-28">
             <div className="max-w-2xl">
-              <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-card/65 px-3.5 py-2 text-xs font-bold uppercase tracking-[0.16em] text-primary backdrop-blur">
-                <ShieldCheck aria-hidden="true" className="size-3.5" />
-                {eyebrow}
-              </p>
-              <h1 className="text-balance font-heading text-5xl leading-[0.98] font-semibold tracking-[-0.045em] sm:text-6xl lg:text-[4.55rem]">
+              <p className="landing-running-head mb-6 text-primary">{eyebrow}</p>
+              <h1 className="text-balance font-serif text-5xl leading-[0.94] font-medium tracking-[-0.045em] sm:text-6xl lg:text-[4.9rem]">
                 {title}
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl">
                 {intro}
               </p>
 
-              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-xl shadow-foreground/10 transition hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  href="/books"
-                >
-                  Start writing
-                  <ArrowRight aria-hidden="true" className="size-4" />
-                </Link>
-                <a
-                  className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl border border-border bg-card/60 px-6 text-sm font-bold text-foreground transition hover:border-primary/30 hover:bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  href={GITHUB_URL}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <Code2 aria-hidden="true" className="size-4" />
-                  View source
-                  <ExternalLink aria-hidden="true" className="size-3.5" />
-                </a>
-              </div>
+              <PublicActions
+                className="mt-9"
+                primaryLabel="Start writing"
+                secondaryExternal
+                secondaryHref={GITHUB_URL}
+                secondaryLabel="View source"
+              />
 
-              <ul className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-muted-foreground">
+              <ul className="seo-hero-facts mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-muted-foreground">
                 {heroChecks.map((item) => (
-                  <li className="flex items-center gap-1.5" key={item}>
-                    <Check aria-hidden="true" className="size-4 text-primary" />
-                    {item}
-                  </li>
+                  <li key={item}>{item}</li>
                 ))}
               </ul>
             </div>
 
-            <figure className="relative mx-auto w-full max-w-2xl lg:mx-0">
-              <div
-                aria-hidden="true"
-                className="absolute -inset-5 -z-10 rotate-2 rounded-[2.2rem] bg-primary/10"
-              />
-              <div className="overflow-hidden rounded-[1.7rem] border border-border bg-card shadow-2xl shadow-foreground/10">
-                <Image
-                  alt={heroImage.alt}
-                  className="h-auto w-full"
-                  height={1024}
-                  priority
-                  sizes="(min-width: 1024px) 55vw, 100vw"
-                  src={heroImage.src}
-                  width={1536}
-                />
-                <figcaption className="flex items-center gap-2 border-t border-border bg-card px-5 py-4 text-xs font-semibold text-muted-foreground">
-                  <HardDrive aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
-                  {heroImage.caption}
-                </figcaption>
-              </div>
-            </figure>
+            <PublicScreenshotPlate
+              alt={heroImage.alt}
+              caption={heroImage.caption}
+              className="mx-auto w-full max-w-2xl lg:mx-0"
+              meta="Awthor · manuscript"
+              plate="Plate i"
+              priority
+              runningHead="The writing room"
+              sizes="(min-width: 1024px) 55vw, 100vw"
+              src={heroImage.src}
+            />
           </div>
         </section>
 
@@ -261,90 +234,23 @@ export function SeoLandingPage({
 
         <RelatedPages pages={relatedPages} />
 
-        <section className="px-5 pb-8 sm:px-8">
-          <div className="mx-auto w-full max-w-7xl rounded-[2rem] bg-foreground px-7 py-10 text-background sm:px-10 lg:px-14 lg:py-14">
-            <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-background/70">
-                  Your next chapter
-                </p>
-                <h2 className="mt-3 max-w-2xl font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Start writing before the setup becomes another project.
-                </h2>
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-background/65 sm:text-base">
-                  Open Awthor in your browser, create a book, and keep the first draft on this
-                  device. No account or payment step stands between you and the page.
-                </p>
-              </div>
-              <Link
-                className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-background px-6 py-3.5 text-sm font-bold text-foreground transition hover:-translate-y-0.5 hover:bg-background/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-background"
-                href="/books"
-              >
-                Start writing
-                <ArrowRight aria-hidden="true" className="size-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
+        <PublicCta
+          description={
+            <p>
+              Open Awthor in your browser, create a book, and keep the first draft on this device.
+              No account or payment step stands between you and the page.
+            </p>
+          }
+          id="start-writing"
+          marginLabel="Your next chapter"
+          marginNote="No setup ceremony"
+          primaryLabel="Start writing"
+          title="Start writing before the setup becomes another project."
+        />
       </main>
 
-      <MarketingFooter />
+      <PublicFooter />
     </div>
-  );
-}
-
-function MarketingHeader() {
-  return (
-    <header className="relative z-20 border-b border-border">
-      <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-12">
-        <Link
-          className="flex items-center gap-2.5 font-heading text-xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-          href="/"
-        >
-          <BrandMark className="shadow-lg shadow-foreground/10" />
-          awthor
-        </Link>
-        <nav
-          aria-label="Explore Awthor"
-          className="hidden items-center gap-7 text-sm font-semibold text-muted-foreground lg:flex"
-        >
-          <Link
-            className="transition-colors hover:text-foreground"
-            href="/open-source-novel-writing-app"
-          >
-            Open source
-          </Link>
-          <Link
-            className="transition-colors hover:text-foreground"
-            href="/private-local-first-writing-app"
-          >
-            Privacy
-          </Link>
-          <Link className="transition-colors hover:text-foreground" href="/scrivener-alternative">
-            Compare
-          </Link>
-        </nav>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <a
-            className="hidden items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:inline-flex"
-            href={GITHUB_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <Code2 aria-hidden="true" className="size-4" />
-            GitHub
-            <ExternalLink aria-hidden="true" className="size-3" />
-          </a>
-          <Link
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-foreground/10 transition hover:-translate-y-0.5 hover:bg-primary/90"
-            href="/books"
-          >
-            Start writing
-            <ArrowRight aria-hidden="true" className="size-4" />
-          </Link>
-        </div>
-      </div>
-    </header>
   );
 }
 
@@ -429,62 +335,5 @@ function RelatedPages({ pages }: { pages: RelatedPage[] }) {
         ))}
       </div>
     </section>
-  );
-}
-
-function MarketingFooter() {
-  return (
-    <footer className="mt-8 border-t border-border bg-muted/50">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 pt-12 pb-8 sm:px-8 md:flex-row md:items-end md:justify-between lg:px-12">
-        <div className="max-w-md">
-          <Link
-            className="inline-flex items-center gap-2.5 font-heading text-xl font-semibold tracking-tight"
-            href="/"
-          >
-            <BrandMark size={36} />
-            awthor
-          </Link>
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            A free, open-source, local-first novel writing app with on-device proofreading and
-            optional sync.
-          </p>
-        </div>
-        <nav
-          aria-label="Explore Awthor"
-          className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-muted-foreground"
-        >
-          <Link className="transition-colors hover:text-foreground" href="/">
-            Home
-          </Link>
-          <Link
-            className="transition-colors hover:text-foreground"
-            href="/open-source-novel-writing-app"
-          >
-            Open-source writing app
-          </Link>
-          <Link
-            className="transition-colors hover:text-foreground"
-            href="/private-local-first-writing-app"
-          >
-            Private local-first writing
-          </Link>
-          <Link className="transition-colors hover:text-foreground" href="/scrivener-alternative">
-            Scrivener alternative
-          </Link>
-          <Link className="transition-colors hover:text-foreground" href="/books">
-            Your library
-          </Link>
-          <a
-            className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
-            href={GITHUB_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            Source code
-            <ExternalLink aria-hidden="true" className="size-3" />
-          </a>
-        </nav>
-      </div>
-    </footer>
   );
 }

@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { groupBlocksIntoPages } from "@/lib/manuscript-pagination";
 import { MarkdownManuscript } from "./markdown-manuscript";
+import styles from "./paged-manuscript.module.css";
 
 type PagedManuscriptProps = {
+  bookTitle: string;
   chapterLabel: string;
   onPaginated?: () => void;
   showTitle?: boolean;
@@ -13,6 +15,7 @@ type PagedManuscriptProps = {
 };
 
 export function PagedManuscript({
+  bookTitle,
   chapterLabel,
   onPaginated,
   showTitle = true,
@@ -46,7 +49,24 @@ export function PagedManuscript({
     for (const [pageIndex, blockIndexes] of pageGroups.entries()) {
       const page = document.createElement("section");
       page.className = "manuscript-page";
-      page.setAttribute("aria-label", `Page ${pageIndex + 1} of ${pageGroups.length}`);
+      page.setAttribute(
+        "aria-label",
+        `${bookTitle}, ${chapterLabel}: ${title}, page ${pageIndex + 1} of ${pageGroups.length}`,
+      );
+
+      const runningHeader = document.createElement("header");
+      runningHeader.ariaHidden = "true";
+      runningHeader.className = styles.runningHeader;
+
+      const runningBookTitle = document.createElement("span");
+      runningBookTitle.className = styles.runningBookTitle;
+      runningBookTitle.textContent = bookTitle;
+
+      const runningChapterTitle = document.createElement("span");
+      runningChapterTitle.className = styles.runningChapterTitle;
+      runningChapterTitle.textContent = `${chapterLabel} · ${title}`;
+
+      runningHeader.append(runningBookTitle, runningChapterTitle);
 
       const content = document.createElement("div");
       content.className = "manuscript-page-content manuscript-page-flow manuscript-reader";
@@ -62,14 +82,14 @@ export function PagedManuscript({
       number.className = "manuscript-page-number";
       number.textContent = String(pageIndex + 1);
 
-      page.append(content, number);
+      page.append(runningHeader, content, number);
       pages.append(page);
     }
 
     pageHost.replaceChildren(pages);
     setPageCount(pageGroups.length);
     onPaginated?.();
-  }, [onPaginated]);
+  }, [bookTitle, chapterLabel, onPaginated, title]);
 
   useEffect(() => {
     const measureContent = measureContentRef.current;

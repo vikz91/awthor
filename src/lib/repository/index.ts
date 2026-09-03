@@ -32,6 +32,10 @@ export {
 export * from "./manuscript-autosave";
 export * from "./models";
 export {
+  readRepositoryMutation,
+  repositoryMutatedEventName,
+} from "./mutation-events";
+export {
   createSeedRepositoryData,
   hasSeedRepositoryData,
   seedRepositoryBookIds,

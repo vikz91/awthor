@@ -4,7 +4,6 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils";
 
 type ChapterProgressRailProps = {
-  inspectorOpen?: boolean;
   targetRef: RefObject<HTMLElement | null>;
 };
 
@@ -17,13 +16,13 @@ type RailMetrics = {
 
 const maximumMarkers = 9;
 const topInset = 96;
+const railGapFromManuscript = 32;
+const minimumViewportInset = 16;
 
-export function ChapterProgressRail({
-  inspectorOpen = false,
-  targetRef,
-}: ChapterProgressRailProps) {
+export function ChapterProgressRail({ targetRef }: ChapterProgressRailProps) {
   const [activeMarker, setActiveMarker] = useState(0);
   const [metrics, setMetrics] = useState<RailMetrics | null>(null);
+  const [rightOffset, setRightOffset] = useState(minimumViewportInset);
   const metricsRef = useRef<RailMetrics | null>(null);
   const updateFrameRef = useRef<number | null>(null);
 
@@ -50,6 +49,9 @@ export function ChapterProgressRail({
     const bounds = target.getBoundingClientRect();
     const targetTop = bounds.top + window.scrollY;
     const nextMetrics = calculateRailMetrics(targetTop, bounds.height, window.innerHeight);
+    setRightOffset(
+      Math.max(minimumViewportInset, window.innerWidth - bounds.right - railGapFromManuscript),
+    );
 
     if (!nextMetrics) {
       metricsRef.current = null;
@@ -101,12 +103,8 @@ export function ChapterProgressRail({
   return (
     <nav
       aria-label="Chapter reading positions"
-      className={cn(
-        "fixed top-1/2 z-30 hidden -translate-y-1/2 opacity-45 transition-opacity hover:opacity-100 focus-within:opacity-100 motion-reduce:transition-none lg:block",
-        inspectorOpen
-          ? "right-4 min-[72rem]:right-[calc(var(--workspace-inspector-width)+1rem)]"
-          : "right-4 xl:right-7",
-      )}
+      className="fixed top-1/2 z-30 hidden -translate-y-1/2 opacity-35 transition-opacity hover:opacity-100 focus-within:opacity-100 motion-reduce:transition-none lg:block"
+      style={{ right: rightOffset }}
     >
       <ol className="relative flex flex-col items-center py-1 before:absolute before:top-4 before:bottom-4 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-border before:content-['']">
         {Array.from({ length: metrics.markerCount }, (_, markerIndex) => {

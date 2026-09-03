@@ -1,6 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LibraryMobileHeaderFrame } from "./books-library";
+import { BooksLibraryFallback, LibraryMobileHeaderFrame } from "./books-library";
+
+describe("BooksLibraryFallback", () => {
+  it("announces the page-turning library loader", () => {
+    const markup = renderToStaticMarkup(<BooksLibraryFallback />);
+
+    expect(markup).toContain("<output");
+    expect(markup).toContain('aria-live="polite"');
+    expect(markup).toContain("Opening your local library…");
+  });
+});
 
 describe("LibraryMobileHeaderFrame", () => {
   it("keeps the primary library actions labeled and touch-friendly", () => {

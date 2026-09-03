@@ -1,8 +1,20 @@
 import type { AppSettings, Book, Chapter, Character, OnboardingDetails, Theme } from "./models";
 
+export type RepositoryMutationSyncPolicy = "local-only" | "progress" | "deferred" | "immediate";
+
+export type RepositoryMutationDetail = {
+  syncPolicy: RepositoryMutationSyncPolicy;
+  reason?: string;
+};
+
+export type RepositoryMutationOptions = {
+  syncPolicy?: RepositoryMutationSyncPolicy;
+  reason?: string;
+};
+
 export interface ValueRepository<Value> {
   get(): Promise<Value | null>;
-  save(value: Value): Promise<void>;
+  save(value: Value, options?: RepositoryMutationOptions): Promise<void>;
   clear(): Promise<void>;
 }
 

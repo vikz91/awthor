@@ -28,6 +28,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { AppTopBar } from "@/components/app-top-bar";
 import { SettingsInspector } from "@/components/settings-dialog";
@@ -41,6 +42,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DrawerBody, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { WorkspaceInspector } from "@/components/ui/workspace-inspector";
 import type { BookExportSnapshot } from "@/lib/book-export";
 import {
   formatMarkdownSelection,
@@ -59,6 +62,7 @@ import {
   type DocumentLayout,
   getAwthorRepository,
   type ManuscriptAutosave,
+  type RepositoryMutationSyncPolicy,
   resolveBookProofreadingSettings,
   type SaveState,
   type WorkspaceMode,
@@ -73,6 +77,12 @@ import {
   type WorkspaceCommandResult,
   workspaceCommandEventName,
 } from "@/lib/webmcp/workspace-bridge";
+import {
+  isReadingChromeEdge,
+  isSuddenReadingScroll,
+  readingChromeBurstVisibilityMs,
+  slowReadingCollapseDistance,
+} from "@/lib/workspace-scroll-chrome";
 import { BookExport } from "./book-export";
 import { BookFloatingToolbar } from "./book-floating-toolbar";
 import { BookPublish } from "./book-publish";
@@ -96,7 +106,14 @@ type SelectionToolbarState = SelectionFormatPosition & {
 
 type FocusModeState = "off" | "pending" | "native" | "fallback";
 
+type SettingsSaveOptions = {
+  syncPolicy: RepositoryMutationSyncPolicy;
+  reason?: string;
+};
+
 const toolValues = new Set<Exclude<WorkspaceTool, null>>(["spelling", "characters", "chapter-arc"]);
+const readingPositionSaveThreshold = 0.0025;
+const readingPositionSaveIntervalMs = 15_000;
 
 export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const router = useRouter();
@@ -115,13 +132,14 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const [dirtyTool, setDirtyTool] = useState<Exclude<WorkspaceTool, null> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chapterChooserOpen, setChapterChooserOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [selectionToolbar, setSelectionToolbar] = useState<SelectionToolbarState | null>(null);
   const [focusModeState, setFocusModeState] = useState<FocusModeState>("off");
   const [proofreadingPreferences, setProofreadingPreferences] = useState<BookProofreadingSettings>(
     createDefaultBookProofreadingSettings,
   );
   const [documentLayout, setDocumentLayout] = useState<DocumentLayout>("seamless");
+  const [readingChromeVisible, setReadingChromeVisible] = useState(true);
 
   const autosaveRef = useRef<ManuscriptAutosave | null>(null);
   const bookRef = useRef<Book | null>(null);
@@ -138,8 +156,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const pendingLayoutPositionRef = useRef<number | null>(null);
   const fullscreenVerificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inspectorPositionRef = useRef<number | null>(null);
-  const settingsButtonRef = useRef<HTMLButtonElement>(null);
-  const mobileSettingsButtonRef = useRef<HTMLButtonElement>(null);
+  const actionsMenuButtonRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const caretByChapterRef = useRef(new Map<string, { start: number; end: number }>());
   const focusEditorAfterModeChangeRef = useRef(false);
@@ -147,9 +164,43 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const scrollingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionRepositionFrameRef = useRef<number | null>(null);
   const closingOverlayRef = useRef<"tool" | "settings" | "chooser" | null>(null);
+  const readingChromeAtEdgeRef = useRef(true);
+  const readingChromeBurstActiveRef = useRef(false);
+  const readingChromeBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   focusModeStateRef.current = focusModeState;
 
   const focusMode = focusModeState !== "off";
+
+  const clearReadingChromeBurstTimer = useCallback(() => {
+    if (readingChromeBurstTimerRef.current) {
+      clearTimeout(readingChromeBurstTimerRef.current);
+      readingChromeBurstTimerRef.current = null;
+    }
+  }, []);
+
+  const handleReadingChromeVisibleChange = useCallback(
+    (visible: boolean) => {
+      if (mode !== "read" || focusMode) {
+        return;
+      }
+
+      if (!visible && readingChromeBurstActiveRef.current) {
+        return;
+      }
+
+      clearReadingChromeBurstTimer();
+      readingChromeBurstActiveRef.current = false;
+      setReadingChromeVisible(visible || readingChromeAtEdgeRef.current);
+    },
+    [clearReadingChromeBurstTimer, focusMode, mode],
+  );
+
+  const handleActionsMenuOpenChange = useCallback((open: boolean) => {
+    setActionsMenuOpen(open);
+    if (!open) {
+      requestAnimationFrame(() => actionsMenuButtonRef.current?.focus({ preventScroll: true }));
+    }
+  }, []);
 
   const currentChapter = chapters.find((chapter) => chapter.id === currentChapterId) ?? null;
   const currentChapterIndex = currentChapter
@@ -160,7 +211,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1
       ? chapters[currentChapterIndex + 1]
       : null;
-  const inspectorOpen = !focusMode && (activeTool !== null || settingsOpen);
+  const inspectorOpen = !focusMode && (activeTool !== null || settingsOpen || actionsMenuOpen);
   const exportSnapshot = useMemo<BookExportSnapshot | null>(() => {
     if (!book) {
       return null;
@@ -195,10 +246,10 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   }, []);
 
   const queueSettingsSave = useCallback(
-    (nextSettings: AppSettings): Promise<void> => {
+    (nextSettings: AppSettings, options: SettingsSaveOptions): Promise<void> => {
       updateSettings(nextSettings);
       const operation = settingsWriteTailRef.current.then(() =>
-        repository.settings.save(nextSettings),
+        repository.settings.save(nextSettings, options),
       );
       settingsWriteTailRef.current = operation.catch(() => undefined);
       return operation;
@@ -207,13 +258,21 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   );
 
   const patchSettings = useCallback(
-    (patcher: (current: AppSettings) => AppSettings): Promise<void> => {
+    (
+      patcher: (current: AppSettings) => AppSettings,
+      options: SettingsSaveOptions,
+    ): Promise<void> => {
       const current = settingsRef.current;
       if (!current) {
         return Promise.resolve();
       }
 
-      return queueSettingsSave(patcher(current));
+      const next = patcher(current);
+      if (next === current) {
+        return Promise.resolve();
+      }
+
+      return queueSettingsSave(next, options);
     },
     [queueSettingsSave],
   );
@@ -280,17 +339,25 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
 
         if (selectedChapter) {
           replaceWorkspaceQuery({ chapter: selectedChapter.id });
-          const nextSettings: AppSettings = {
-            ...data.settings,
-            activeBookId: bookId,
-            lastChapterByBook: {
-              ...data.settings.lastChapterByBook,
-              [bookId]: selectedChapter.id,
-            },
-          };
-          void queueSettingsSave(nextSettings).catch(() => {
-            setSaveError("The reading position could not be updated on this device.");
-          });
+          if (
+            data.settings.activeBookId !== bookId ||
+            data.settings.lastChapterByBook[bookId] !== selectedChapter.id
+          ) {
+            const nextSettings: AppSettings = {
+              ...data.settings,
+              activeBookId: bookId,
+              lastChapterByBook: {
+                ...data.settings.lastChapterByBook,
+                [bookId]: selectedChapter.id,
+              },
+            };
+            void queueSettingsSave(nextSettings, {
+              syncPolicy: "immediate",
+              reason: "workspace-open",
+            }).catch(() => {
+              setSaveError("The reading position could not be updated on this device.");
+            });
+          }
         }
       } catch (reason) {
         setLoadError(
@@ -389,13 +456,16 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       setDocumentLayout(nextLayout);
 
       try {
-        await patchSettings((current) => ({
-          ...current,
-          editor: {
-            ...current.editor,
-            layout: nextLayout,
-          },
-        }));
+        await patchSettings(
+          (current) => ({
+            ...current,
+            editor: {
+              ...current.editor,
+              layout: nextLayout,
+            },
+          }),
+          { syncPolicy: "deferred", reason: "document-layout" },
+        );
       } catch (reason) {
         const failedSettings = settingsRef.current;
         if (failedSettings) {
@@ -427,19 +497,32 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   );
 
   const rememberReadingPosition = useCallback(
-    async (waitForWrite = false) => {
+    async (syncPolicy: RepositoryMutationSyncPolicy, waitForWrite = false) => {
       if (!bookRef.current || !settingsRef.current) {
         return;
       }
 
       const ratio = currentScrollPosition();
-      const write = patchSettings((current) => ({
-        ...current,
-        readingPositionByBook: {
-          ...current.readingPositionByBook,
-          [bookId]: ratio,
+      const write = patchSettings(
+        (current) => {
+          const savedRatio = current.readingPositionByBook[bookId];
+          if (
+            savedRatio !== undefined &&
+            Math.abs(savedRatio - ratio) < readingPositionSaveThreshold
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+            readingPositionByBook: {
+              ...current.readingPositionByBook,
+              [bookId]: ratio,
+            },
+          };
         },
-      }));
+        { syncPolicy, reason: "reading-position" },
+      );
 
       if (waitForWrite) {
         try {
@@ -475,13 +558,11 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     }
 
     function handleScroll() {
-      if (scrollingSaveTimerRef.current) {
-        clearTimeout(scrollingSaveTimerRef.current);
-      }
+      if (scrollingSaveTimerRef.current) return;
       scrollingSaveTimerRef.current = setTimeout(() => {
         scrollingSaveTimerRef.current = null;
-        void rememberReadingPosition();
-      }, 300);
+        void rememberReadingPosition("progress");
+      }, readingPositionSaveIntervalMs);
     }
 
     const focusScroller = focusScrollRef.current;
@@ -718,7 +799,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     function handleLifecycleSave() {
       captureCaret();
       void flushCurrentDraft();
-      void rememberReadingPosition(true);
+      void rememberReadingPosition("progress", true);
     }
 
     function handleVisibilityChange() {
@@ -752,7 +833,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         }
       }
 
-      await rememberReadingPosition(true);
+      await rememberReadingPosition("immediate", true);
       autosaveRef.current?.cancel();
       currentChapterIdRef.current = chapter.id;
       dismissSelectionToolbar();
@@ -770,18 +851,21 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
         setChapterChooserOpen(false);
       }
 
-      void patchSettings((current) => ({
-        ...current,
-        activeBookId: bookId,
-        lastChapterByBook: {
-          ...current.lastChapterByBook,
-          [bookId]: chapter.id,
-        },
-        readingPositionByBook: {
-          ...current.readingPositionByBook,
-          [bookId]: 0,
-        },
-      })).catch(() => {
+      void patchSettings(
+        (current) => ({
+          ...current,
+          activeBookId: bookId,
+          lastChapterByBook: {
+            ...current.lastChapterByBook,
+            [bookId]: chapter.id,
+          },
+          readingPositionByBook: {
+            ...current.readingPositionByBook,
+            [bookId]: 0,
+          },
+        }),
+        { syncPolicy: "immediate", reason: "chapter-navigation" },
+      ).catch(() => {
         setSaveError("The last opened chapter could not be remembered.");
       });
       requestAnimationFrame(() => restoreCurrentScrollPosition(0));
@@ -884,10 +968,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       setSettingsOpen(false);
       closeOverlayQuery("settings");
       requestAnimationFrame(() => {
-        const settingsTrigger = window.matchMedia("(min-width: 64rem)").matches
-          ? settingsButtonRef.current
-          : mobileSettingsButtonRef.current;
-        settingsTrigger?.focus({ preventScroll: true });
+        actionsMenuButtonRef.current?.focus({ preventScroll: true });
       });
     },
     [closeOverlayQuery, confirmToolTransition, flushCurrentDraft, preserveInspectorPosition],
@@ -940,7 +1021,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
             },
           };
         }
-        await rememberReadingPosition(true);
+        await rememberReadingPosition(command.type === "leave" ? "immediate" : "progress", true);
         return { ok: true, type: command.type === "leave" ? "leave" : "prepared" };
       }
 
@@ -1242,7 +1323,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     captureCaret();
     pendingFocusExitPositionRef.current = currentScrollPosition();
     void flushCurrentDraft();
-    void rememberReadingPosition(true);
+    void rememberReadingPosition("progress", true);
 
     if (document.fullscreenElement === workspaceRootRef.current) {
       try {
@@ -1290,13 +1371,27 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     }
 
     void flushCurrentDraft();
-    void patchSettings((current) => ({
-      ...current,
-      readingPositionByBook: {
-        ...current.readingPositionByBook,
-        [bookId]: focusEntryPositionRef.current,
+    void patchSettings(
+      (current) => {
+        const ratio = focusEntryPositionRef.current;
+        const savedRatio = current.readingPositionByBook[bookId];
+        if (
+          savedRatio !== undefined &&
+          Math.abs(savedRatio - ratio) < readingPositionSaveThreshold
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          readingPositionByBook: {
+            ...current.readingPositionByBook,
+            [bookId]: ratio,
+          },
+        };
       },
-    })).catch(() => {
+      { syncPolicy: "progress", reason: "focus-position" },
+    ).catch(() => {
       setSaveError("The reading position could not be saved on this device.");
     });
 
@@ -1399,6 +1494,114 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       document.body.style.overflow = previousBodyOverflow;
     };
   }, [focusMode]);
+
+  useEffect(() => {
+    if (mode !== "read" || focusMode || !currentChapterId) {
+      clearReadingChromeBurstTimer();
+      readingChromeAtEdgeRef.current = true;
+      readingChromeBurstActiveRef.current = false;
+      setReadingChromeVisible(true);
+      return;
+    }
+
+    let frame: number | null = null;
+    let previousDirection = 0;
+    let slowTravel = 0;
+    const scrollingElement = document.scrollingElement;
+    if (!scrollingElement) {
+      return;
+    }
+
+    let previousPosition = scrollingElement.scrollTop;
+    let previousTime = performance.now();
+    readingChromeAtEdgeRef.current = isReadingChromeEdge({
+      scrollHeight: scrollingElement.scrollHeight,
+      scrollTop: previousPosition,
+      viewportHeight: window.innerHeight,
+    });
+    setReadingChromeVisible(true);
+
+    const scheduleBurstHide = () => {
+      clearReadingChromeBurstTimer();
+      readingChromeBurstTimerRef.current = setTimeout(() => {
+        readingChromeBurstTimerRef.current = null;
+        readingChromeBurstActiveRef.current = false;
+        if (!readingChromeAtEdgeRef.current) {
+          setReadingChromeVisible(false);
+        }
+      }, readingChromeBurstVisibilityMs);
+    };
+
+    const updateVisibility = () => {
+      frame = null;
+      const currentPosition = scrollingElement.scrollTop;
+      const currentTime = performance.now();
+      const distance = currentPosition - previousPosition;
+      const elapsedMs = currentTime - previousTime;
+      const atEdge = isReadingChromeEdge({
+        scrollHeight: scrollingElement.scrollHeight,
+        scrollTop: currentPosition,
+        viewportHeight: window.innerHeight,
+      });
+      readingChromeAtEdgeRef.current = atEdge;
+
+      if (atEdge) {
+        clearReadingChromeBurstTimer();
+        readingChromeBurstActiveRef.current = false;
+        previousDirection = 0;
+        slowTravel = 0;
+        setReadingChromeVisible(true);
+      } else if (distance !== 0) {
+        const direction = Math.sign(distance);
+        if (direction !== previousDirection) {
+          slowTravel = 0;
+          previousDirection = direction;
+        }
+
+        if (isSuddenReadingScroll({ distance, elapsedMs })) {
+          slowTravel = 0;
+          readingChromeBurstActiveRef.current = true;
+          setReadingChromeVisible(true);
+          scheduleBurstHide();
+        } else if (readingChromeBurstActiveRef.current) {
+          setReadingChromeVisible(true);
+          scheduleBurstHide();
+        } else {
+          slowTravel += Math.abs(distance);
+          if (slowTravel >= slowReadingCollapseDistance) {
+            setReadingChromeVisible(false);
+          }
+        }
+      }
+
+      previousPosition = currentPosition;
+      previousTime = currentTime;
+    };
+    const scheduleUpdate = () => {
+      if (frame === null) {
+        frame = requestAnimationFrame(updateVisibility);
+      }
+    };
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    if (articleRef.current) {
+      resizeObserver.observe(articleRef.current);
+    }
+
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    scheduleUpdate();
+
+    return () => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+      clearReadingChromeBurstTimer();
+      readingChromeBurstActiveRef.current = false;
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate);
+    };
+  }, [clearReadingChromeBurstTimer, currentChapterId, focusMode, mode]);
 
   useEffect(() => {
     async function handlePopState() {
@@ -1549,7 +1752,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
     if (!(await flushCurrentDraft())) {
       return;
     }
-    await rememberReadingPosition(true);
+    await rememberReadingPosition("immediate", true);
     router.push("/books");
   }
 
@@ -1655,13 +1858,16 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   }
 
   async function saveProofreadingPreferences(nextPreferences: BookProofreadingSettings) {
-    await patchSettings((current) => ({
-      ...current,
-      proofreadingByBook: {
-        ...current.proofreadingByBook,
-        [bookId]: nextPreferences,
-      },
-    }));
+    await patchSettings(
+      (current) => ({
+        ...current,
+        proofreadingByBook: {
+          ...current.proofreadingByBook,
+          [bookId]: nextPreferences,
+        },
+      }),
+      { syncPolicy: "deferred", reason: "proofreading-preferences" },
+    );
     setProofreadingPreferences(nextPreferences);
   }
 
@@ -1727,7 +1933,8 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       {!focusMode ? (
         <>
           <header
-            className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-backdrop-filter:bg-background/75 lg:hidden"
+            className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-backdrop-filter:bg-background/75"
+            data-app-top-bar
             onPointerDown={revealBookTools}
           >
             <div className="mx-auto w-full max-w-[96rem] px-2">
@@ -1753,7 +1960,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                   <ChevronDown aria-hidden="true" className="size-3.5" />
                 </Button>
                 <div className="flex items-center justify-end">
-                  <div className="grid size-11 place-items-center">
+                  <div className="grid size-11 place-items-center [&_button]:size-11 [&_button]:p-0 [&_button_span]:sr-only">
                     {saveState === "error" ? (
                       <SaveIndicator
                         error={saveError}
@@ -1766,9 +1973,10 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                   </div>
                   <Button
                     aria-label="More book actions"
-                    aria-expanded={mobileMenuOpen}
+                    aria-expanded={actionsMenuOpen}
                     className="size-11 rounded-xl"
-                    onClick={() => setMobileMenuOpen(true)}
+                    onClick={() => setActionsMenuOpen(true)}
+                    ref={actionsMenuButtonRef}
                     title="More book actions"
                     variant="ghost"
                   >
@@ -1776,210 +1984,88 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                   </Button>
                 </div>
               </div>
-              <div className="grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-t border-border/60">
-                <div className="flex justify-end pr-2">
-                  <Button
-                    aria-label="Previous chapter"
-                    className="size-11 rounded-xl"
-                    disabled={!previousChapter}
-                    onClick={() => previousChapter && void selectChapter(previousChapter.id)}
-                    title="Previous chapter"
-                    variant="ghost"
-                  >
-                    <ChevronLeft aria-hidden="true" />
-                  </Button>
-                </div>
-                <div className="flex items-center rounded-2xl border border-border bg-muted/40 p-0.5">
-                  <Button
-                    aria-keyshortcuts="Alt+R"
-                    aria-pressed={mode === "read"}
-                    className={cn(
-                      "h-10 rounded-xl px-3",
-                      mode === "read" && "bg-background shadow-sm",
-                    )}
-                    onClick={() => void switchMode("read")}
-                    title="Read (Alt/Option+R)"
-                    variant="ghost"
-                  >
-                    <BookOpen aria-hidden="true" />
-                    <span>Read</span>
-                  </Button>
-                  <Button
-                    aria-keyshortcuts="Alt+W"
-                    aria-pressed={mode === "write"}
-                    className={cn(
-                      "h-10 rounded-xl px-3",
-                      mode === "write" && "bg-background shadow-sm",
-                    )}
-                    onClick={() => void switchMode("write", true)}
-                    title="Write (Alt/Option+W)"
-                    variant="ghost"
-                  >
-                    <PenLine aria-hidden="true" />
-                    <span>Write</span>
-                  </Button>
-                </div>
-                <div className="flex justify-start pl-2">
-                  <Button
-                    aria-label="Next chapter"
-                    className="size-11 rounded-xl"
-                    disabled={!nextChapter}
-                    onClick={() => nextChapter && void selectChapter(nextChapter.id)}
-                    title="Next chapter"
-                    variant="ghost"
-                  >
-                    <ChevronRight aria-hidden="true" />
-                  </Button>
+              <div
+                aria-hidden={!readingChromeVisible}
+                className={cn(
+                  "grid overflow-hidden transition-[height,opacity,transform] duration-200 ease-out motion-reduce:transition-none",
+                  readingChromeVisible
+                    ? "h-12 translate-y-0 opacity-100"
+                    : "pointer-events-none h-0 -translate-y-2 opacity-0",
+                )}
+                data-reading-secondary-navigation
+                inert={!readingChromeVisible}
+              >
+                <div className="grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-t border-border/60">
+                  <div className="flex justify-end pr-2">
+                    <Button
+                      aria-label="Previous chapter"
+                      className="size-11 rounded-xl"
+                      disabled={!previousChapter}
+                      onClick={() => previousChapter && void selectChapter(previousChapter.id)}
+                      title="Previous chapter"
+                      variant="ghost"
+                    >
+                      <ChevronLeft aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center rounded-2xl border border-border bg-muted/40 p-0.5">
+                    <Button
+                      aria-keyshortcuts="Alt+R"
+                      aria-pressed={mode === "read"}
+                      className={cn(
+                        "h-10 rounded-xl px-3",
+                        mode === "read" && "bg-background shadow-sm",
+                      )}
+                      onClick={() => void switchMode("read")}
+                      title="Read (Alt/Option+R)"
+                      variant="ghost"
+                    >
+                      <BookOpen aria-hidden="true" />
+                      <span>Read</span>
+                    </Button>
+                    <Button
+                      aria-keyshortcuts="Alt+W"
+                      aria-pressed={mode === "write"}
+                      className={cn(
+                        "h-10 rounded-xl px-3",
+                        mode === "write" && "bg-background shadow-sm",
+                      )}
+                      onClick={() => void switchMode("write", true)}
+                      title="Write (Alt/Option+W)"
+                      variant="ghost"
+                    >
+                      <PenLine aria-hidden="true" />
+                      <span>Write</span>
+                    </Button>
+                  </div>
+                  <div className="flex justify-start pl-2">
+                    <Button
+                      aria-label="Next chapter"
+                      className="size-11 rounded-xl"
+                      disabled={!nextChapter}
+                      onClick={() => nextChapter && void selectChapter(nextChapter.id)}
+                      title="Next chapter"
+                      variant="ghost"
+                    >
+                      <ChevronRight aria-hidden="true" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </header>
 
-          <AppTopBar
-            className="hidden lg:block"
-            center={
-              <div className="flex items-center gap-1">
-                <Button
-                  aria-label="Previous chapter"
-                  disabled={!previousChapter}
-                  onClick={() => previousChapter && void selectChapter(previousChapter.id)}
-                  size="icon-sm"
-                  title="Previous chapter"
-                  variant="ghost"
-                >
-                  <ChevronLeft aria-hidden="true" />
-                </Button>
-                <Button
-                  aria-label="Choose chapter"
-                  className="max-w-[12rem] px-2 sm:max-w-[20rem]"
-                  onClick={() => void handleChooserOpenChange(true)}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <span className="truncate">
-                    <span className="hidden sm:inline">{chapterLabel} · </span>
-                    {currentChapter?.title ?? "Chapters"}
-                  </span>
-                  <ChevronDown aria-hidden="true" />
-                </Button>
-                <Button
-                  aria-label="Next chapter"
-                  disabled={!nextChapter}
-                  onClick={() => nextChapter && void selectChapter(nextChapter.id)}
-                  size="icon-sm"
-                  title="Next chapter"
-                  variant="ghost"
-                >
-                  <ChevronRight aria-hidden="true" />
-                </Button>
-              </div>
-            }
-            left={
-              <div className="flex min-w-0 items-center gap-1 sm:gap-3">
-                <Button
-                  aria-label="Back to all books"
-                  onClick={() => void navigateBack()}
-                  size="icon-sm"
-                  title="Back to all books"
-                  variant="ghost"
-                >
-                  <ArrowLeft aria-hidden="true" />
-                </Button>
-                <span className="hidden max-w-48 truncate text-sm font-medium lg:block">
-                  {book.title}
-                </span>
-              </div>
-            }
-            right={
-              <div className="flex items-center gap-1.5">
-                <SaveIndicator
-                  error={saveError}
-                  onRetry={() => void flushCurrentDraft()}
-                  state={saveState}
-                />
-                <SyncControl variant="navbar" />
-                <AccountMenu />
-                <div className="flex items-center rounded-xl border border-border bg-muted/40 p-0.5">
-                  <Button
-                    aria-keyshortcuts="Alt+R"
-                    aria-pressed={mode === "read"}
-                    className={cn(
-                      "h-7 rounded-lg px-2",
-                      mode === "read" && "bg-background shadow-sm",
-                    )}
-                    onClick={() => void switchMode("read")}
-                    size="sm"
-                    title="Read (Alt/Option+R)"
-                    variant="ghost"
-                  >
-                    <BookOpen aria-hidden="true" />
-                    <span className="hidden xl:inline">Read</span>
-                  </Button>
-                  <Button
-                    aria-keyshortcuts="Alt+W"
-                    aria-pressed={mode === "write"}
-                    className={cn(
-                      "h-7 rounded-lg px-2",
-                      mode === "write" && "bg-background shadow-sm",
-                    )}
-                    onClick={() => void switchMode("write", true)}
-                    size="sm"
-                    title="Write (Alt/Option+W)"
-                    variant="ghost"
-                  >
-                    <PenLine aria-hidden="true" />
-                    <span className="hidden xl:inline">Write</span>
-                  </Button>
-                </div>
-                <BookPublish bookId={book.id} />
-                <BookExport snapshot={exportSnapshot} />
-                <Button
-                  aria-label="Open system"
-                  nativeButton={false}
-                  render={<Link href="/test" />}
-                  size="icon-sm"
-                  title="System"
-                  variant="ghost"
-                >
-                  <Database aria-hidden="true" />
-                </Button>
-                <Button
-                  aria-label="Enter focus mode"
-                  disabled={!currentChapter}
-                  onClick={enterFocusMode}
-                  size="icon-sm"
-                  title="Enter focus mode"
-                  variant="ghost"
-                >
-                  <Maximize2 aria-hidden="true" />
-                </Button>
-                <Button
-                  aria-label="Author and app settings"
-                  aria-pressed={settingsOpen}
-                  onClick={() => void handleSettingsOpenChange(true)}
-                  ref={settingsButtonRef}
-                  size="icon-sm"
-                  title="Settings"
-                  variant="ghost"
-                >
-                  <Settings2 aria-hidden="true" />
-                </Button>
-              </div>
-            }
-          />
-
-          <MobileWorkspaceMenu
+          <WorkspaceActionsMenu
             bookId={book.id}
             currentChapter={currentChapter}
             onEnterFocusMode={enterFocusMode}
-            onOpenChange={setMobileMenuOpen}
+            onOpenChange={handleActionsMenuOpenChange}
             onOpenSettings={() => {
-              setMobileMenuOpen(false);
+              setActionsMenuOpen(false);
               void handleSettingsOpenChange(true);
             }}
-            open={mobileMenuOpen}
+            open={actionsMenuOpen}
             settingsOpen={settingsOpen}
-            settingsTriggerRef={mobileSettingsButtonRef}
             snapshot={exportSnapshot}
           />
         </>
@@ -1998,7 +2084,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       >
         {currentChapter ? (
           <article
-            aria-label={`${chapterLabel}: ${currentChapter.title}`}
+            aria-label={`${book.title}, ${chapterLabel}: ${currentChapter.title}`}
             className={cn(
               "mx-auto w-full",
               mode === "read" && documentLayout === "pages" ? "max-w-none" : "max-w-[68ch]",
@@ -2011,6 +2097,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
             >
               {mode === "read" && documentLayout === "pages" ? (
                 <PagedManuscript
+                  bookTitle={book.title}
                   chapterLabel={chapterLabel}
                   onPaginated={restorePendingLayoutPosition}
                   source={withoutLeadingMarkdownTitle(draft)}
@@ -2019,8 +2106,12 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
               ) : (
                 <>
                   <header className={cn(mode === "read" ? "mb-10" : "mb-5")}>
-                    <p className="text-xs font-semibold tracking-[0.24em] text-muted-foreground uppercase">
-                      {chapterLabel}
+                    <p className="flex min-w-0 items-center gap-2 text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                      <span className="truncate">{book.title}</span>
+                      <span aria-hidden="true" className="shrink-0 text-border">
+                        /
+                      </span>
+                      <span className="shrink-0">{chapterLabel}</span>
                     </p>
                     {mode === "read" ? (
                       <h1 className="manuscript-reader mt-5 font-serif text-4xl leading-tight font-medium tracking-[-0.035em] sm:text-5xl">
@@ -2105,7 +2196,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
       ) : null}
 
       {currentChapter && mode === "read" && documentLayout === "seamless" && !focusMode ? (
-        <ChapterProgressRail inspectorOpen={inspectorOpen} targetRef={articleRef} />
+        <ChapterProgressRail targetRef={articleRef} />
       ) : null}
 
       {currentChapter && !focusMode ? (
@@ -2117,7 +2208,8 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           documentLayout={documentLayout}
           draft={draft}
           inspectorOpen={inspectorOpen}
-          menuOpen={mobileMenuOpen || chapterChooserOpen || settingsOpen}
+          menuOpen={actionsMenuOpen || chapterChooserOpen || settingsOpen}
+          readingChromeVisible={mode === "read" ? readingChromeVisible : undefined}
           mode={mode}
           onActiveToolChange={(tool: WorkspaceTool) => void handleToolChange(tool)}
           onApplyDraft={applyToolDraft}
@@ -2128,6 +2220,9 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           }}
           onChapterUpdated={updateChapterFromTool}
           onDocumentLayoutChange={changeDocumentLayout}
+          onReadingChromeVisibleChange={
+            mode === "read" ? handleReadingChromeVisibleChange : undefined
+          }
           onRequestWrite={() => void switchMode("write", true)}
           onRestoreEditorFocus={restoreEditorFocus}
           onToolDirtyChange={handleToolDirtyChange}
@@ -2176,7 +2271,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   );
 }
 
-function MobileWorkspaceMenu({
+function WorkspaceActionsMenu({
   bookId,
   currentChapter,
   onEnterFocusMode,
@@ -2184,7 +2279,6 @@ function MobileWorkspaceMenu({
   onOpenSettings,
   open,
   settingsOpen,
-  settingsTriggerRef,
   snapshot,
 }: {
   bookId: string;
@@ -2194,119 +2288,155 @@ function MobileWorkspaceMenu({
   onOpenSettings: () => void;
   open: boolean;
   settingsOpen: boolean;
-  settingsTriggerRef: { current: HTMLButtonElement | null };
   snapshot: BookExportSnapshot;
 }) {
+  const docked = useSyncExternalStore(
+    subscribeToDockedActions,
+    getDockedActionsSnapshot,
+    getDockedActionsServerSnapshot,
+  );
+  const content = (
+    <div
+      className={cn(
+        "space-y-5 p-3",
+        !docked && "md:grid md:grid-cols-2 md:items-start md:gap-4 md:space-y-0",
+      )}
+    >
+      <section aria-labelledby="workspace-cloud-actions">
+        <h2
+          className="px-3 pb-1.5 text-xs font-medium text-muted-foreground"
+          id="workspace-cloud-actions"
+        >
+          Cloud and sharing
+        </h2>
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
+          <WorkspaceMenuControl
+            description="Back up the latest changes to your account"
+            label="Sync"
+          >
+            <SyncControl mobileVisibility="persistent" variant="navbar" />
+          </WorkspaceMenuControl>
+          <WorkspaceMenuControl description="Create or update a public story page" label="Publish">
+            <BookPublish bookId={bookId} />
+          </WorkspaceMenuControl>
+          <WorkspaceMenuControl description="Download PDF or EPUB, or copy Markdown" label="Export">
+            <BookExport snapshot={snapshot} />
+          </WorkspaceMenuControl>
+          <div className="hidden min-h-16 items-center gap-3 border-t border-border/60 px-4 has-[button]:flex">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Account</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Manage your signed-in profile
+              </p>
+            </div>
+            <div className="grid size-11 place-items-center [&_button]:size-11">
+              <AccountMenu />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="workspace-actions">
+        <h2
+          className="px-3 pb-1.5 text-xs font-medium text-muted-foreground"
+          id="workspace-actions"
+        >
+          Workspace
+        </h2>
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
+          <Button
+            className="h-auto min-h-16 w-full justify-start rounded-none border-b border-border/60 px-4 text-left whitespace-normal"
+            disabled={!currentChapter}
+            onClick={() => {
+              onOpenChange(false);
+              onEnterFocusMode();
+            }}
+            variant="ghost"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Focus mode</span>
+              <span className="block text-xs leading-5 font-normal text-muted-foreground">
+                Hide the workspace chrome for immersive reading or writing
+              </span>
+            </span>
+            <Maximize2 aria-hidden="true" />
+          </Button>
+          <Button
+            aria-pressed={settingsOpen}
+            className="h-auto min-h-16 w-full justify-start rounded-none border-b border-border/60 px-4 text-left whitespace-normal"
+            onClick={onOpenSettings}
+            variant="ghost"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Settings</span>
+              <span className="block text-xs leading-5 font-normal text-muted-foreground">
+                Author profile, proofreading, and app preferences
+              </span>
+            </span>
+            <Settings2 aria-hidden="true" />
+          </Button>
+          <Button
+            className="h-auto min-h-16 w-full justify-start rounded-none px-4 text-left whitespace-normal"
+            nativeButton={false}
+            onClick={() => onOpenChange(false)}
+            render={<Link href="/test" />}
+            variant="ghost"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">System</span>
+              <span className="block text-xs leading-5 font-normal text-muted-foreground">
+                Storage status, backups, and diagnostics
+              </span>
+            </span>
+            <Database aria-hidden="true" />
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+
+  if (docked) {
+    return (
+      <WorkspaceInspector onOpenChange={onOpenChange} open={open}>
+        <DrawerHeader>
+          <DrawerTitle>Book actions</DrawerTitle>
+          <DrawerDescription>Sync, share, and adjust this writing workspace.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>{content}</DrawerBody>
+      </WorkspaceInspector>
+    );
+  }
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="top-auto right-0 bottom-0 left-0 max-h-[min(82dvh,44rem)] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-y-auto rounded-t-3xl rounded-b-none p-0 pb-[max(1rem,env(safe-area-inset-bottom))] duration-150 data-open:slide-in-from-bottom-4 data-closed:slide-out-to-bottom-4 motion-reduce:duration-0 lg:hidden">
+      <DialogContent className="top-auto right-0 bottom-0 left-0 max-h-[min(82dvh,44rem)] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-y-auto rounded-t-3xl rounded-b-none p-0 pb-[max(1rem,env(safe-area-inset-bottom))] duration-150 sm:max-w-none data-open:slide-in-from-bottom-4 data-closed:slide-out-to-bottom-4 motion-reduce:duration-0">
         <DialogHeader className="border-b border-border px-5 py-4 pr-14">
           <DialogTitle className="text-lg">Book actions</DialogTitle>
           <DialogDescription>Sync, share, and adjust this writing workspace.</DialogDescription>
         </DialogHeader>
-
-        <div className="space-y-5 p-3">
-          <section aria-labelledby="mobile-cloud-actions">
-            <h2
-              className="px-3 pb-1.5 text-xs font-medium text-muted-foreground"
-              id="mobile-cloud-actions"
-            >
-              Cloud and sharing
-            </h2>
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
-              <MobileMenuControl
-                description="Back up the latest changes to your account"
-                label="Sync"
-              >
-                <SyncControl mobileVisibility="persistent" variant="navbar" />
-              </MobileMenuControl>
-              <MobileMenuControl description="Create or update a public story page" label="Publish">
-                <BookPublish bookId={bookId} />
-              </MobileMenuControl>
-              <MobileMenuControl
-                description="Download PDF or EPUB, or copy Markdown"
-                label="Export"
-              >
-                <BookExport snapshot={snapshot} />
-              </MobileMenuControl>
-              <div className="hidden min-h-16 items-center gap-3 border-t border-border/60 px-4 has-[button]:flex">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">Account</p>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Manage your signed-in profile
-                  </p>
-                </div>
-                <div className="grid size-11 place-items-center [&_button]:size-11">
-                  <AccountMenu />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section aria-labelledby="mobile-workspace-actions">
-            <h2
-              className="px-3 pb-1.5 text-xs font-medium text-muted-foreground"
-              id="mobile-workspace-actions"
-            >
-              Workspace
-            </h2>
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
-              <Button
-                className="h-auto min-h-16 w-full justify-start rounded-none border-b border-border/60 px-4 text-left whitespace-normal"
-                disabled={!currentChapter}
-                onClick={() => {
-                  onOpenChange(false);
-                  onEnterFocusMode();
-                }}
-                variant="ghost"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">Focus mode</span>
-                  <span className="block text-xs leading-5 font-normal text-muted-foreground">
-                    Hide the workspace chrome for immersive reading or writing
-                  </span>
-                </span>
-                <Maximize2 aria-hidden="true" />
-              </Button>
-              <Button
-                aria-pressed={settingsOpen}
-                className="h-auto min-h-16 w-full justify-start rounded-none border-b border-border/60 px-4 text-left whitespace-normal"
-                onClick={onOpenSettings}
-                ref={settingsTriggerRef}
-                variant="ghost"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">Settings</span>
-                  <span className="block text-xs leading-5 font-normal text-muted-foreground">
-                    Author profile, proofreading, and app preferences
-                  </span>
-                </span>
-                <Settings2 aria-hidden="true" />
-              </Button>
-              <Button
-                className="h-auto min-h-16 w-full justify-start rounded-none px-4 text-left whitespace-normal"
-                nativeButton={false}
-                onClick={() => onOpenChange(false)}
-                render={<Link href="/test" />}
-                variant="ghost"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">System</span>
-                  <span className="block text-xs leading-5 font-normal text-muted-foreground">
-                    Storage status, backups, and diagnostics
-                  </span>
-                </span>
-                <Database aria-hidden="true" />
-              </Button>
-            </div>
-          </section>
-        </div>
+        {content}
       </DialogContent>
     </Dialog>
   );
 }
 
-function MobileMenuControl({
+const dockedActionsQuery = "(min-width: 72rem)";
+
+function subscribeToDockedActions(onStoreChange: () => void) {
+  const media = window.matchMedia(dockedActionsQuery);
+  media.addEventListener("change", onStoreChange);
+  return () => media.removeEventListener("change", onStoreChange);
+}
+
+function getDockedActionsSnapshot() {
+  return window.matchMedia(dockedActionsQuery).matches;
+}
+
+function getDockedActionsServerSnapshot() {
+  return false;
+}
+
+function WorkspaceMenuControl({
   children,
   description,
   label,
