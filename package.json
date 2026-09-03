@@ -11,8 +11,10 @@
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "lint": "biome check",
+    "lint:staged": "lint-staged",
     "format": "biome format --write",
-    "test": "bun test"
+    "test": "bun test",
+    "prepare": "husky"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -45,8 +47,13 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "fake-indexeddb": "^6.2.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.4.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,cjs,mjs,cts,mts,json,jsonc,css}": "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true"
   },
   "packageManager": "bun@1.4.0",
   "ignoreScripts": [

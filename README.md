@@ -351,6 +351,7 @@ load the bundled Markdown demo workspace.
 | `bun dev` | Start the Next.js development server with Bun |
 | `bun run format` | Format supported files with Biome |
 | `bun run lint` | Run Biome checks across the project |
+| `bun run lint:staged` | Format and check staged supported files with Biome |
 | `bun test` | Run repository, migration, Markdown, autosave, and proofreading unit tests |
 | `bun run build` | Create the standard optimized production build |
 | `node node_modules/next/dist/bin/next build` | Run the Node 24 Vercel-equivalent build |
