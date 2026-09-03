@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a focused improvement for writers.
+title: "feature: "
+labels: [enhancement, needs-triage]
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for a similar request.
+          required: true
+        - label: This request preserves Awthor's free, minimal, and local-first direction.
+          required: true
+        - label: I will answer follow-up questions about this use case.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Writer problem
+      description: What real writing task is difficult today? Describe who it helps and when.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the smallest useful behavior. Mockups or examples are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What existing Awthor workflow, tool, or workaround have you tried?
+    validations:
+      required: true
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Can you help implement or test it?
+      options:
+        - I can help implement it.
+        - I can test a proposal.
+        - I can provide more use-case detail.
+        - I cannot help right now.
+    validations:
+      required: true

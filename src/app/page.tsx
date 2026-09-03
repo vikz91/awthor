@@ -18,41 +18,44 @@ import Image from "next/image";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { SyncAccountAction } from "@/components/sync-account-action";
+import { HOME_METADATA, SoftwareApplicationJsonLd } from "@/lib/seo";
+
+export const metadata = HOME_METADATA;
 
 const features = [
   {
     icon: PenLine,
-    title: "One uninterrupted workspace",
+    title: "Write without wrestling the app",
     description:
       "Read, write, format, and focus in the same manuscript view—without navigating away from your chapter.",
   },
   {
     icon: BookOpenText,
-    title: "A story bible when you need it",
+    title: "Keep the story close",
     description:
       "Keep characters and chapter arcs close at hand in quiet drawers that never interrupt the draft.",
   },
   {
     icon: SpellCheck2,
-    title: "Proofread privately",
+    title: "Get feedback without giving up privacy",
     description:
       "Run spelling, grammar, and style checks on-device with Harper.js—your manuscript is never sent away.",
   },
   {
     icon: FileDown,
-    title: "Keep every exit open",
+    title: "Own a portable manuscript",
     description:
-      "Write portable Markdown, download a complete PDF, copy your manuscript, and make local ZIP backups.",
+      "Download portable Markdown, PDF, or EPUB files, and keep complete local ZIP backups.",
   },
   {
     icon: MoonStar,
-    title: "Made for long sessions",
+    title: "Made to live in for hours",
     description:
       "Choose warm Paper or low-glare Stone, then switch between seamless and page layouts as you write.",
   },
   {
     icon: Cloud,
-    title: "Optional sync",
+    title: "Sync only when it helps",
     description:
       "Write without an account. When you choose Sync, your signed-in library is ready on another device.",
   },
@@ -60,7 +63,9 @@ const features = [
 
 export default function Home() {
   return (
-    <div className="min-h-screen overflow-hidden bg-background text-foreground transition-colors">
+    <>
+      <SoftwareApplicationJsonLd />
+      <div className="min-h-screen overflow-hidden bg-background text-foreground transition-colors">
       <header className="relative z-20 border-b border-border">
         <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-12">
           <Link
@@ -75,8 +80,8 @@ export default function Home() {
             aria-label="Primary navigation"
             className="hidden items-center gap-8 text-sm font-semibold text-muted-foreground md:flex"
           >
-            <a className="transition-colors hover:text-foreground" href="#features">
-              Features
+            <a className="transition-colors hover:text-foreground" href="#why-awthor">
+              Why Awthor
             </a>
             <a className="transition-colors hover:text-foreground" href="#workspace">
               See Awthor
@@ -90,6 +95,16 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <a
+              className="hidden items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:inline-flex"
+              href="https://github.com/vikz91/awthor"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Code2 aria-hidden="true" className="size-4" />
+              GitHub
+              <ExternalLink aria-hidden="true" className="size-3" />
+            </a>
             <SyncAccountAction variant="landing-header" />
             <Link
               className="hidden rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
@@ -119,14 +134,15 @@ export default function Home() {
             <div className="max-w-2xl">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-card/65 px-3.5 py-2 text-xs font-bold uppercase tracking-[0.16em] text-primary backdrop-blur">
                 <Sparkles aria-hidden="true" className="size-3.5" />
-                Free &amp; open source
+                Free · Open source · Local-first
               </div>
               <h1 className="text-balance font-heading text-5xl leading-[0.98] font-semibold tracking-[-0.045em] sm:text-6xl lg:text-[4.8rem]">
-                Your story deserves a quieter place.
+                A novel workspace that keeps your story yours.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl">
-                A calm, capable workspace for drafting a novel. Your books live on your device by
-                default; optional sync is there when you want your library on another device.
+                Awthor removes the busywork around a long-form draft—without asking you to rent your
+                own manuscript. Write locally, keep portable backups, and add sync only when another
+                device truly needs it.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -134,14 +150,27 @@ export default function Home() {
                   className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-xl shadow-foreground/10 transition hover:-translate-y-0.5 hover:bg-primary/90"
                   href="/books"
                 >
-                  Start your first book
+                  Start writing freely
                   <ArrowRight aria-hidden="true" className="size-4" />
                 </Link>
                 <a
-                  className="inline-flex h-13 items-center justify-center rounded-2xl border border-border bg-card/60 px-6 text-sm font-bold text-foreground transition hover:border-primary/30 hover:bg-card"
-                  href="#how-it-works"
+                  className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl border border-border bg-card/60 px-6 text-sm font-bold text-foreground transition hover:border-primary/30 hover:bg-card"
+                  href="https://github.com/vikz91/awthor"
+                  rel="noreferrer"
+                  target="_blank"
                 >
-                  See how it works
+                  <Code2 aria-hidden="true" className="size-4" />
+                  View on GitHub
+                  <ExternalLink aria-hidden="true" className="size-3.5" />
+                </a>
+                <a
+                  className="inline-flex h-13 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-bold text-primary transition hover:bg-primary/10"
+                  href="https://github.com/vikz91/awthor"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <Sparkles aria-hidden="true" className="size-4" />
+                  Star Awthor
                 </a>
                 <SyncAccountAction variant="landing-hero" />
               </div>
@@ -154,6 +183,10 @@ export default function Home() {
                 <span className="flex items-center gap-1.5">
                   <Check aria-hidden="true" className="size-4 text-primary" />
                   No account required
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Check aria-hidden="true" className="size-4 text-primary" />
+                  Export whenever you want
                 </span>
               </div>
             </div>
@@ -185,24 +218,39 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="border-y border-border bg-muted/50" id="features">
-          <div className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-16 sm:px-8 md:grid-cols-2 lg:grid-cols-3 lg:px-12 lg:py-20">
-            {features.map((feature) => (
-              <article
-                className="rounded-[1.5rem] border border-border bg-card p-6 shadow-lg shadow-foreground/5 sm:p-7"
-                key={feature.title}
-              >
-                <div className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
-                  <feature.icon aria-hidden="true" className="size-5" />
-                </div>
-                <h2 className="mt-6 font-heading text-xl font-semibold tracking-tight">
-                  {feature.title}
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {feature.description}
-                </p>
-              </article>
-            ))}
+        <section className="border-y border-border bg-muted/50" id="why-awthor">
+          <div className="mx-auto w-full max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
+            <div className="max-w-3xl">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+                Why writers choose Awthor
+              </p>
+              <h2 className="mt-4 text-balance font-heading text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
+                A focused place to finish the book—not just begin it.
+              </h2>
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
+                The app is deliberately small where it should be and capable where a long draft
+                needs support. Nothing is locked behind a plan or held hostage in a proprietary
+                format.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {features.map((feature) => (
+                <article
+                  className="rounded-[1.5rem] border border-border bg-card p-6 shadow-lg shadow-foreground/5 sm:p-7"
+                  key={feature.title}
+                >
+                  <div className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
+                    <feature.icon aria-hidden="true" className="size-5" />
+                  </div>
+                  <h3 className="mt-6 font-heading text-xl font-semibold tracking-tight">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -375,13 +423,16 @@ export default function Home() {
                   optional sync remains your choice whenever you need another device.
                 </p>
               </div>
-              <Link
+              <a
                 className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-background px-6 py-3.5 text-sm font-bold text-foreground transition hover:-translate-y-0.5 hover:bg-background/90"
-                href="/books"
+                href="https://github.com/vikz91/awthor"
+                rel="noreferrer"
+                target="_blank"
               >
-                Open your library
-                <ArrowRight aria-hidden="true" className="size-4" />
-              </Link>
+                <Code2 aria-hidden="true" className="size-4" />
+                Star Awthor on GitHub
+                <ExternalLink aria-hidden="true" className="size-4" />
+              </a>
             </div>
 
             <div className="mt-9 grid gap-3 border-t border-background/10 pt-7 sm:grid-cols-3">
@@ -429,8 +480,8 @@ export default function Home() {
               </h2>
               <ul className="mt-5 space-y-3 text-sm font-semibold text-muted-foreground">
                 <li>
-                  <a className="transition-colors hover:text-foreground" href="#features">
-                    Features
+                  <a className="transition-colors hover:text-foreground" href="#why-awthor">
+                    Why Awthor
                   </a>
                 </li>
                 <li>
@@ -476,6 +527,18 @@ export default function Home() {
                 <li>
                   <a
                     className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+                    href="https://github.com/vikz91/awthor"
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <Code2 aria-hidden="true" className="size-4" />
+                    Star Awthor
+                    <ExternalLink aria-hidden="true" className="size-3" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
                     href="https://github.com/vikz91/awthor/blob/main/LICENSE"
                     rel="noreferrer"
                     target="_blank"
@@ -505,6 +568,7 @@ export default function Home() {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   );
 }

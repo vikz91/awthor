@@ -394,6 +394,18 @@ development and theme requirements for coding agents.
 Set `NEXT_PUBLIC_SITE_URL` to the deployed origin so social metadata uses the correct absolute URL.
 MongoDB is required only for the optional account sync feature; no pricing configuration is required.
 
+## Contributing
+
+Contributions, bug reports, and focused feature proposals are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, quality checks, and the project’s local-first design
+boundaries. Use the GitHub issue forms for reproducible bugs and well-defined feature requests;
+questions belong in [GitHub Discussions](https://github.com/vikz91/awthor/discussions).
+
+Please do not post manuscripts, backups, credentials, or personal data. By submitting an issue or
+pull request, contributors confirm that they can share the content, will respond to follow-up, and
+accept the project’s [Code of Conduct](CODE_OF_CONDUCT.md). Security vulnerabilities must be
+reported privately according to [SECURITY.md](SECURITY.md).
+
 ## License
 
 Awthor is free and open-source software licensed under the

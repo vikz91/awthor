@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible problem in Awthor.
+title: "bug: "
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to help. Do not include manuscript text, backups, tokens,
+        email addresses, or other private information. Use synthetic/redacted examples instead.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I can reproduce this on the current version of Awthor.
+          required: true
+        - label: I removed private writing, credentials, and personal data from this report.
+          required: true
+        - label: I will respond to follow-up questions and test a proposed fix if I can.
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and the expected behavior.
+      placeholder: I expected … but instead …
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Numbered, minimal steps that a maintainer can follow using safe sample data.
+      placeholder: |
+        1. Open …
+        2. Create …
+        3. Select …
+        4. Observe …
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and version, operating system, Awthor deployment or commit, and whether sync/MCP is configured.
+      placeholder: Chrome 140 on macOS 15; deployed app; sync enabled.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe evidence
+      description: Add redacted screenshots, console errors, or a minimal synthetic example. Never attach a real backup or manuscript.

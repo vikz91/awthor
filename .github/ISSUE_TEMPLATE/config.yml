@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and support
+    url: https://github.com/vikz91/awthor/discussions
+    about: Ask for help, share an idea in progress, or discuss how to use Awthor.
+  - name: Security vulnerability
+    url: https://github.com/vikz91/awthor/security/advisories/new
+    about: Report vulnerabilities privately. Do not disclose security issues in public tickets.
