@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { WebMcpSiteTools } from "@/components/webmcp-site-tools";
 import { clerkConfiguration } from "@/lib/auth/config";
 import { themeBootstrapScript } from "@/lib/repository";
+import { DEFAULT_METADATA_DESCRIPTION, DEFAULT_METADATA_TITLE, SITE_URL } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
 const outfitHeading = Outfit({
@@ -33,33 +34,14 @@ const newsreader = Newsreader({
   variable: "--font-newsreader",
 });
 
-function parseMetadataBase(value: string | undefined) {
-  const origin = value?.trim();
-  if (!origin) {
-    return null;
-  }
-
-  try {
-    return new URL(origin.includes("://") ? origin : `https://${origin}`);
-  } catch {
-    return null;
-  }
-}
-
-const metadataBase =
-  parseMetadataBase(process.env.NEXT_PUBLIC_SITE_URL) ??
-  parseMetadataBase(process.env.VERCEL_PROJECT_PRODUCTION_URL) ??
-  parseMetadataBase(process.env.VERCEL_URL) ??
-  new URL("http://localhost:3000");
-
 export const metadata: Metadata = {
-  metadataBase,
+  metadataBase: new URL(SITE_URL),
+  applicationName: "Awthor",
   title: {
-    default: "Awthor — A quieter place to write your novel",
+    default: DEFAULT_METADATA_TITLE,
     template: "%s · Awthor",
   },
-  description:
-    "A free, open-source novel-writing workspace that keeps your manuscript on your device.",
+  description: DEFAULT_METADATA_DESCRIPTION,
   icons: {
     icon: [
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
@@ -68,18 +50,30 @@ export const metadata: Metadata = {
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
-    title: "Awthor — A quieter place to write your novel",
-    description:
-      "A free, open-source novel-writing workspace that keeps your manuscript on your device.",
-    images: [{ url: "/og.png", width: 1731, height: 909, alt: "Awthor" }],
+    title: DEFAULT_METADATA_TITLE,
+    description: DEFAULT_METADATA_DESCRIPTION,
+    siteName: "Awthor",
+    images: [
+      {
+        url: "/og.png",
+        width: 1731,
+        height: 909,
+        alt: "Awthor local-first novel writing workspace",
+      },
+    ],
+    locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Awthor — A quieter place to write your novel",
-    description:
-      "A free, open-source novel-writing workspace that keeps your manuscript on your device.",
-    images: ["/og.png"],
+    title: DEFAULT_METADATA_TITLE,
+    description: DEFAULT_METADATA_DESCRIPTION,
+    images: [
+      {
+        url: "/og.png",
+        alt: "Awthor local-first novel writing workspace",
+      },
+    ],
   },
 };
 

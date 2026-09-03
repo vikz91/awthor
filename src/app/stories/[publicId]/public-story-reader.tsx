@@ -285,6 +285,19 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
             </section>
           ) : null}
         </article>
+
+        <footer className="mx-auto max-w-3xl border-t border-border py-8 text-center sm:py-10">
+          <p className="text-xs leading-5 text-muted-foreground sm:text-sm">
+            Written and published with{" "}
+            <a
+              className="rounded-sm font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring motion-reduce:transition-none"
+              href="https://awthor.abhishekdeb.com"
+            >
+              Awthor
+            </a>{" "}
+            — a free, private writing app.
+          </p>
+        </footer>
       </div>
 
       <nav

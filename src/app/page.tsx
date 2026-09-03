@@ -63,9 +63,8 @@ const features = [
 
 export default function Home() {
   return (
-    <>
+    <div className="min-h-screen overflow-hidden bg-background text-foreground transition-colors">
       <SoftwareApplicationJsonLd />
-      <div className="min-h-screen overflow-hidden bg-background text-foreground transition-colors">
       <header className="relative z-20 border-b border-border">
         <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-12">
           <Link
@@ -480,6 +479,30 @@ export default function Home() {
               </h2>
               <ul className="mt-5 space-y-3 text-sm font-semibold text-muted-foreground">
                 <li>
+                  <Link
+                    className="transition-colors hover:text-foreground"
+                    href="/open-source-novel-writing-app"
+                  >
+                    Open-source writing
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="transition-colors hover:text-foreground"
+                    href="/private-local-first-writing-app"
+                  >
+                    Private, local-first writing
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="transition-colors hover:text-foreground"
+                    href="/scrivener-alternative"
+                  >
+                    Scrivener comparison
+                  </Link>
+                </li>
+                <li>
                   <a className="transition-colors hover:text-foreground" href="#why-awthor">
                     Why Awthor
                   </a>
@@ -568,7 +591,6 @@ export default function Home() {
           </div>
         </div>
       </footer>
-      </div>
-    </>
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import { BookWorkspace } from "./book-workspace";
 export const metadata: Metadata = {
   title: "Book workspace",
   description: "Read and write a locally stored Awthor manuscript.",
+  robots: { index: false, follow: false },
 };
 
 export default async function BookPage({ params }: PageProps<"/books/[bookId]">) {
