@@ -23,6 +23,17 @@ const syncedSettingsSchema = appSettingsSchema.pick({
   proofreadingByBook: true,
 });
 
+/** Server revisions resolve versions, not parent-child dependencies. */
+const syncApplicationOrder: Record<SyncRecordType, number> = {
+  profile: 0,
+  theme: 1,
+  settings: 2,
+  progress: 3,
+  book: 4,
+  chapter: 5,
+  character: 5,
+};
+
 function recordKey(recordType: SyncRecord["recordType"], recordId: string) {
   return `${recordType}:${recordId}`;
 }
@@ -245,8 +256,11 @@ export function applySyncRecords(
   };
   const books = new Map(next.books.map((book) => [book.id, book]));
   let changed = false;
+  const orderedRecords = [...canonicalRecords].sort(
+    (left, right) => syncApplicationOrder[left.recordType] - syncApplicationOrder[right.recordType],
+  );
 
-  for (const remote of canonicalRecords) {
+  for (const remote of orderedRecords) {
     const key = recordKey(remote.recordType, remote.recordId);
     const local = nextState.records[key];
     if (local && compareSyncRecords(local, remote) > 0) continue;

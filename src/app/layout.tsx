@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Newsreader, Nunito_Sans, Outfit, Patrick_Hand } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { BackupReminder } from "@/components/backup-reminder";
+import { InlineScript } from "@/components/inline-script";
 import { SyncProvider } from "@/components/sync-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { WebMcpSiteTools } from "@/components/webmcp-site-tools";
@@ -99,9 +99,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       )}
     >
       <head>
-        <Script id="awthor-theme" strategy="beforeInteractive">
-          {themeBootstrapScript}
-        </Script>
+        <InlineScript html={themeBootstrapScript} id="awthor-theme" />
       </head>
       <body className="flex min-h-full flex-col">
         <AuthProvider

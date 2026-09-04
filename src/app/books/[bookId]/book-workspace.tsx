@@ -23,6 +23,7 @@ import {
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -77,12 +78,6 @@ import {
   type WorkspaceCommandResult,
   workspaceCommandEventName,
 } from "@/lib/webmcp/workspace-bridge";
-import {
-  isReadingChromeEdge,
-  isSuddenReadingScroll,
-  readingChromeBurstVisibilityMs,
-  slowReadingCollapseDistance,
-} from "@/lib/workspace-scroll-chrome";
 import { BookExport } from "./book-export";
 import { BookFloatingToolbar } from "./book-floating-toolbar";
 import { BookPublish } from "./book-publish";
@@ -92,6 +87,7 @@ import { FocusModeControls } from "./focus-mode-controls";
 import { EmptyManuscript, MarkdownManuscript } from "./markdown-manuscript";
 import { PagedManuscript } from "./paged-manuscript";
 import { type SelectionFormatPosition, SelectionFormatToolbar } from "./selection-format-toolbar";
+import { useWorkspaceChrome } from "./use-workspace-chrome";
 
 type BookWorkspaceProps = {
   bookId: string;
@@ -140,7 +136,6 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   );
   const [documentLayout, setDocumentLayout] = useState<DocumentLayout>("seamless");
   const [notebookMode, setNotebookMode] = useState(false);
-  const [readingChromeVisible, setReadingChromeVisible] = useState(true);
 
   const autosaveRef = useRef<ManuscriptAutosave | null>(null);
   const bookRef = useRef<Book | null>(null);
@@ -165,36 +160,15 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   const scrollingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionRepositionFrameRef = useRef<number | null>(null);
   const closingOverlayRef = useRef<"tool" | "settings" | "chooser" | null>(null);
-  const readingChromeAtEdgeRef = useRef(true);
-  const readingChromeBurstActiveRef = useRef(false);
-  const readingChromeBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   focusModeStateRef.current = focusModeState;
 
   const focusMode = focusModeState !== "off";
-
-  const clearReadingChromeBurstTimer = useCallback(() => {
-    if (readingChromeBurstTimerRef.current) {
-      clearTimeout(readingChromeBurstTimerRef.current);
-      readingChromeBurstTimerRef.current = null;
-    }
-  }, []);
-
-  const handleReadingChromeVisibleChange = useCallback(
-    (visible: boolean) => {
-      if (mode !== "read" || focusMode) {
-        return;
-      }
-
-      if (!visible && readingChromeBurstActiveRef.current) {
-        return;
-      }
-
-      clearReadingChromeBurstTimer();
-      readingChromeBurstActiveRef.current = false;
-      setReadingChromeVisible(visible || readingChromeAtEdgeRef.current);
-    },
-    [clearReadingChromeBurstTimer, focusMode, mode],
-  );
+  const workspaceChrome = useWorkspaceChrome({
+    chapterId: currentChapterId,
+    disabled: focusMode,
+    heldOpen: activeTool !== null || actionsMenuOpen || chapterChooserOpen || settingsOpen,
+    targetRef: articleRef,
+  });
 
   const handleActionsMenuOpenChange = useCallback((open: boolean) => {
     setActionsMenuOpen(open);
@@ -1551,114 +1525,6 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   }, [focusMode]);
 
   useEffect(() => {
-    if (mode !== "read" || focusMode || !currentChapterId) {
-      clearReadingChromeBurstTimer();
-      readingChromeAtEdgeRef.current = true;
-      readingChromeBurstActiveRef.current = false;
-      setReadingChromeVisible(true);
-      return;
-    }
-
-    let frame: number | null = null;
-    let previousDirection = 0;
-    let slowTravel = 0;
-    const scrollingElement = document.scrollingElement;
-    if (!scrollingElement) {
-      return;
-    }
-
-    let previousPosition = scrollingElement.scrollTop;
-    let previousTime = performance.now();
-    readingChromeAtEdgeRef.current = isReadingChromeEdge({
-      scrollHeight: scrollingElement.scrollHeight,
-      scrollTop: previousPosition,
-      viewportHeight: window.innerHeight,
-    });
-    setReadingChromeVisible(true);
-
-    const scheduleBurstHide = () => {
-      clearReadingChromeBurstTimer();
-      readingChromeBurstTimerRef.current = setTimeout(() => {
-        readingChromeBurstTimerRef.current = null;
-        readingChromeBurstActiveRef.current = false;
-        if (!readingChromeAtEdgeRef.current) {
-          setReadingChromeVisible(false);
-        }
-      }, readingChromeBurstVisibilityMs);
-    };
-
-    const updateVisibility = () => {
-      frame = null;
-      const currentPosition = scrollingElement.scrollTop;
-      const currentTime = performance.now();
-      const distance = currentPosition - previousPosition;
-      const elapsedMs = currentTime - previousTime;
-      const atEdge = isReadingChromeEdge({
-        scrollHeight: scrollingElement.scrollHeight,
-        scrollTop: currentPosition,
-        viewportHeight: window.innerHeight,
-      });
-      readingChromeAtEdgeRef.current = atEdge;
-
-      if (atEdge) {
-        clearReadingChromeBurstTimer();
-        readingChromeBurstActiveRef.current = false;
-        previousDirection = 0;
-        slowTravel = 0;
-        setReadingChromeVisible(true);
-      } else if (distance !== 0) {
-        const direction = Math.sign(distance);
-        if (direction !== previousDirection) {
-          slowTravel = 0;
-          previousDirection = direction;
-        }
-
-        if (isSuddenReadingScroll({ distance, elapsedMs })) {
-          slowTravel = 0;
-          readingChromeBurstActiveRef.current = true;
-          setReadingChromeVisible(true);
-          scheduleBurstHide();
-        } else if (readingChromeBurstActiveRef.current) {
-          setReadingChromeVisible(true);
-          scheduleBurstHide();
-        } else {
-          slowTravel += Math.abs(distance);
-          if (slowTravel >= slowReadingCollapseDistance) {
-            setReadingChromeVisible(false);
-          }
-        }
-      }
-
-      previousPosition = currentPosition;
-      previousTime = currentTime;
-    };
-    const scheduleUpdate = () => {
-      if (frame === null) {
-        frame = requestAnimationFrame(updateVisibility);
-      }
-    };
-    const resizeObserver = new ResizeObserver(scheduleUpdate);
-    if (articleRef.current) {
-      resizeObserver.observe(articleRef.current);
-    }
-
-    window.addEventListener("resize", scheduleUpdate);
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    scheduleUpdate();
-
-    return () => {
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-      clearReadingChromeBurstTimer();
-      readingChromeBurstActiveRef.current = false;
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", scheduleUpdate);
-      window.removeEventListener("scroll", scheduleUpdate);
-    };
-  }, [clearReadingChromeBurstTimer, currentChapterId, focusMode, mode]);
-
-  useEffect(() => {
     async function handlePopState() {
       closingOverlayRef.current = null;
       const query = readWorkspaceQuery();
@@ -1812,11 +1678,36 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
   }
 
   function revealBookTools() {
+    workspaceChrome.reveal();
     window.dispatchEvent(
       new CustomEvent("awthor:reveal-tools", {
         detail: { focus: false },
       }),
     );
+  }
+
+  function handleTopChromeFocus(event: ReactFocusEvent<HTMLElement>) {
+    if ((event.target as HTMLElement).matches(":focus-visible")) {
+      workspaceChrome.setInteraction("top-focus", true);
+    }
+  }
+
+  function handleTopChromeBlur(event: ReactFocusEvent<HTMLElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      workspaceChrome.setInteraction("top-focus", false);
+    }
+  }
+
+  function handleWorkspacePointerDown(event: ReactPointerEvent<HTMLElement>) {
+    const target = event.target;
+    if (
+      !(target instanceof Element) ||
+      target.closest("button, a, input, textarea, select, [contenteditable='true']")
+    ) {
+      return;
+    }
+
+    workspaceChrome.reveal();
   }
 
   function changeDraft(event: ChangeEvent<HTMLTextAreaElement>) {
@@ -1990,7 +1881,12 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           <header
             className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-backdrop-filter:bg-background/75"
             data-app-top-bar
+            data-workspace-chrome-phase={workspaceChrome.phase}
+            onBlurCapture={handleTopChromeBlur}
+            onFocusCapture={handleTopChromeFocus}
             onPointerDown={revealBookTools}
+            onPointerEnter={() => workspaceChrome.setInteraction("top-pointer", true)}
+            onPointerLeave={() => workspaceChrome.setInteraction("top-pointer", false)}
           >
             <div className="mx-auto w-full max-w-[96rem] px-2">
               <div className="grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center">
@@ -2040,15 +1936,15 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
                 </div>
               </div>
               <div
-                aria-hidden={!readingChromeVisible}
+                aria-hidden={!workspaceChrome.visible}
                 className={cn(
                   "grid overflow-hidden transition-[height,opacity,transform] duration-200 ease-out motion-reduce:transition-none",
-                  readingChromeVisible
+                  workspaceChrome.visible
                     ? "h-12 translate-y-0 opacity-100"
                     : "pointer-events-none h-0 -translate-y-2 opacity-0",
                 )}
-                data-reading-secondary-navigation
-                inert={!readingChromeVisible}
+                data-workspace-secondary-navigation
+                inert={!workspaceChrome.visible}
               >
                 <div className="grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-t border-border/60">
                   <div className="flex justify-end pr-2">
@@ -2135,6 +2031,7 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           inspectorOpen &&
             "min-[72rem]:mr-[var(--workspace-inspector-width)] min-[72rem]:ml-auto min-[72rem]:max-w-[min(72rem,calc(100%-var(--workspace-inspector-width)))]",
         )}
+        onPointerDown={handleWorkspacePointerDown}
         ref={focusScrollRef}
       >
         {currentChapter ? (
@@ -2273,9 +2170,8 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           documentLayout={documentLayout}
           draft={draft}
           inspectorOpen={inspectorOpen}
-          menuOpen={actionsMenuOpen || chapterChooserOpen || settingsOpen}
           notebookMode={notebookMode}
-          readingChromeVisible={mode === "read" ? readingChromeVisible : undefined}
+          chromeVisible={workspaceChrome.visible}
           mode={mode}
           onActiveToolChange={(tool: WorkspaceTool) => void handleToolChange(tool)}
           onApplyDraft={applyToolDraft}
@@ -2287,9 +2183,8 @@ export function BookWorkspace({ bookId }: BookWorkspaceProps) {
           onChapterUpdated={updateChapterFromTool}
           onDocumentLayoutChange={changeDocumentLayout}
           onNotebookModeChange={changeNotebookMode}
-          onReadingChromeVisibleChange={
-            mode === "read" ? handleReadingChromeVisibleChange : undefined
-          }
+          onChromeInteractionChange={workspaceChrome.setInteraction}
+          onChromeReveal={workspaceChrome.reveal}
           onRequestWrite={() => void switchMode("write", true)}
           onRestoreEditorFocus={restoreEditorFocus}
           onToolDirtyChange={handleToolDirtyChange}

@@ -257,6 +257,46 @@ describe("sync records", () => {
     expect(result.data.settings.activeBookId).toBe(result.data.books[0]?.id ?? null);
   });
 
+  test("applies books before their chapters and characters regardless of revision order", async () => {
+    const source = createSeedRepositoryData();
+    const sourceBook = source.books[0];
+    const snapshot = await createSyncSnapshot(
+      source,
+      createSyncDeviceState("device-a"),
+      "2026-01-01T00:00:00.000Z",
+    );
+    const bookRecord = snapshot.changedRecords.find(
+      (record) => record.recordType === "book" && record.recordId === sourceBook.id,
+    );
+    const dependentRecords = snapshot.changedRecords.filter(
+      (record) =>
+        (record.recordType === "chapter" || record.recordType === "character") &&
+        record.recordId.startsWith(`${sourceBook.id}:`),
+    );
+    if (!bookRecord || dependentRecords.length === 0) {
+      throw new Error("Seed data must include a book with dependent records.");
+    }
+
+    const target = structuredClone(source);
+    target.books = [];
+    target.chapters = {};
+    target.characters = {};
+    const canonical = [...dependentRecords, bookRecord].map((record, index) => ({
+      ...record,
+      serverRevision: index + 1,
+    }));
+
+    const result = applySyncRecords(target, createSyncDeviceState("device-b"), canonical);
+
+    expect(result.data.books.map((book) => book.id)).toEqual([sourceBook.id]);
+    expect(result.data.chapters[sourceBook.id].map((chapter) => chapter.id)).toEqual(
+      source.chapters[sourceBook.id].map((chapter) => chapter.id),
+    );
+    expect(result.data.characters[sourceBook.id].map((character) => character.id)).toEqual(
+      source.characters[sourceBook.id].map((character) => character.id),
+    );
+  });
+
   test("repairs duplicate chapter numbers from merged workspaces before local persistence", () => {
     const data = createSeedRepositoryData();
     const bookId = data.books[0].id;
