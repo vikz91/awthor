@@ -39,124 +39,37 @@ type FloatingToolbarProps = {
   label: string;
   accessory?: ReactNode;
   announcement?: string;
-  autoHide?: boolean;
   className?: string;
   collapsedIcon?: string;
   collapsedLabel?: string;
-  heldOpen?: boolean;
-  initialVisibleMs?: number;
-  onVisibleChange?: (visible: boolean) => void;
-  visible?: boolean;
+  onInteractionChange: (source: "focus" | "pointer" | "shortcut", active: boolean) => void;
+  onReveal: () => void;
+  visible: boolean;
 };
-
-const desktopRevealDistance = 96;
-const revealIntentDelay = 140;
-const hideDelay = 900;
-const upwardScrollRevealDistance = 12;
 
 export function FloatingToolbar({
   accessory,
   announcement,
-  autoHide = false,
   className,
   collapsedIcon = "PanelBottomOpen",
   collapsedLabel = "Tools",
-  heldOpen = false,
-  initialVisibleMs = 4000,
   items,
   label,
-  onVisibleChange,
+  onInteractionChange,
+  onReveal,
   visible,
 }: FloatingToolbarProps) {
   const toolbarId = useId();
   const [activeIndex, setActiveIndex] = useState(() => firstEnabledIndex(items));
   const activeIndexRef = useRef(activeIndex);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
-  const [uncontrolledVisible, setUncontrolledVisible] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const contentRef = useRef<HTMLFieldSetElement>(null);
   const focusOnRevealRef = useRef(false);
   const handleRef = useRef<HTMLButtonElement>(null);
-  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const itemsRef = useRef(items);
-  const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isPointerInsideRef = useRef(false);
-  const scrollPositionsRef = useRef(
-    new WeakMap<EventTarget, { position: number; upwardDistance: number }>(),
-  );
-  const heldOpenRef = useRef(heldOpen);
-  const isVisible = heldOpen || visible || (visible === undefined && uncontrolledVisible);
-  heldOpenRef.current = heldOpen;
+  const isVisible = visible;
   itemsRef.current = items;
-
-  const clearHideTimeout = useCallback(() => {
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-  }, []);
-
-  const clearRevealTimeout = useCallback(() => {
-    if (revealTimeoutRef.current) {
-      clearTimeout(revealTimeoutRef.current);
-      revealTimeoutRef.current = null;
-    }
-  }, []);
-
-  const setToolbarVisible = useCallback(
-    (nextVisible: boolean) => {
-      if (visible === undefined) {
-        setUncontrolledVisible(nextVisible);
-      }
-      onVisibleChange?.(nextVisible);
-    },
-    [onVisibleChange, visible],
-  );
-
-  const showToolbar = useCallback(() => {
-    clearHideTimeout();
-    clearRevealTimeout();
-    setToolbarVisible(true);
-  }, [clearHideTimeout, clearRevealTimeout, setToolbarVisible]);
-
-  const scheduleReveal = useCallback(() => {
-    clearHideTimeout();
-    if (revealTimeoutRef.current) {
-      return;
-    }
-    revealTimeoutRef.current = setTimeout(() => {
-      revealTimeoutRef.current = null;
-      setToolbarVisible(true);
-    }, revealIntentDelay);
-  }, [clearHideTimeout, setToolbarVisible]);
-
-  const scheduleHide = useCallback(() => {
-    if (!autoHide || heldOpenRef.current || hideTimeoutRef.current) {
-      return;
-    }
-
-    hideTimeoutRef.current = setTimeout(
-      () => {
-        hideTimeoutRef.current = null;
-
-        if (
-          isPointerInsideRef.current ||
-          heldOpenRef.current ||
-          (document.activeElement && contentRef.current?.contains(document.activeElement))
-        ) {
-          return;
-        }
-
-        setToolbarVisible(false);
-      },
-      isCoarsePointer ? initialVisibleMs : hideDelay,
-    );
-  }, [autoHide, initialVisibleMs, isCoarsePointer, setToolbarVisible]);
-
-  const revealTemporarily = useCallback(() => {
-    showToolbar();
-    scheduleHide();
-  }, [scheduleHide, showToolbar]);
 
   const revealAndFocus = useCallback(
     (itemId?: string) => {
@@ -170,7 +83,7 @@ export function FloatingToolbar({
         }
       }
       focusOnRevealRef.current = true;
-      showToolbar();
+      onReveal();
       requestAnimationFrame(() => {
         const controls = enabledControls(contentRef.current);
         if (controls.length === 0) {
@@ -181,7 +94,7 @@ export function FloatingToolbar({
         controls[nextIndex]?.focus();
       });
     },
-    [showToolbar],
+    [onReveal],
   );
 
   useEffect(() => {
@@ -191,92 +104,6 @@ export function FloatingToolbar({
     media.addEventListener("change", updatePointer);
     return () => media.removeEventListener("change", updatePointer);
   }, []);
-
-  useEffect(() => {
-    if (heldOpen) {
-      showToolbar();
-    } else {
-      clearHideTimeout();
-      scheduleHide();
-    }
-  }, [clearHideTimeout, heldOpen, scheduleHide, showToolbar]);
-
-  useEffect(() => {
-    if (!autoHide || !isCoarsePointer) {
-      return;
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Element | null;
-      const isEditorTarget = Boolean(target?.closest("input, textarea, [contenteditable='true']"));
-      if (isEditorTarget && !contentRef.current?.contains(target) && !heldOpenRef.current) {
-        clearHideTimeout();
-        setToolbarVisible(false);
-        return;
-      }
-
-      const isToolbarTarget = Boolean(
-        contentRef.current?.contains(target) || handleRef.current?.contains(target),
-      );
-      const touchesTopBar = Boolean(target?.closest("[data-app-top-bar]"));
-
-      if (touchesTopBar) {
-        revealTemporarily();
-      } else if (isVisible && !isToolbarTarget && !heldOpenRef.current) {
-        clearHideTimeout();
-        scheduleHide();
-      }
-    }
-
-    function handleScroll(event: Event) {
-      const target = event.target;
-      if (!target) {
-        return;
-      }
-
-      const currentPosition = scrollPosition(target);
-      if (currentPosition === null) {
-        return;
-      }
-
-      const previous = scrollPositionsRef.current.get(target) ?? {
-        position: currentPosition,
-        upwardDistance: 0,
-      };
-      const upwardDistance =
-        previous.position > currentPosition
-          ? previous.upwardDistance + previous.position - currentPosition
-          : 0;
-      const shouldReveal = upwardDistance >= upwardScrollRevealDistance;
-      scrollPositionsRef.current.set(target, {
-        position: currentPosition,
-        upwardDistance: shouldReveal ? 0 : upwardDistance,
-      });
-      if (shouldReveal) {
-        revealTemporarily();
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown, { passive: true });
-    if (visible === undefined) {
-      document.addEventListener("scroll", handleScroll, { capture: true, passive: true });
-    }
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      if (visible === undefined) {
-        document.removeEventListener("scroll", handleScroll, true);
-      }
-    };
-  }, [
-    autoHide,
-    clearHideTimeout,
-    isCoarsePointer,
-    isVisible,
-    revealTemporarily,
-    scheduleHide,
-    setToolbarVisible,
-    visible,
-  ]);
 
   useEffect(() => {
     if (items[activeIndex]?.disabled) {
@@ -300,69 +127,28 @@ export function FloatingToolbar({
   }, [activeIndex, isVisible]);
 
   useEffect(() => {
-    function handlePointerMove(event: PointerEvent) {
-      if (!autoHide || isCoarsePointer || event.pointerType === "touch") {
-        return;
-      }
-
-      const handleBounds = handleRef.current?.getBoundingClientRect();
-      const isOverHandle =
-        handleBounds &&
-        event.clientX >= handleBounds.left &&
-        event.clientX <= handleBounds.right &&
-        event.clientY >= handleBounds.top &&
-        event.clientY <= handleBounds.bottom;
-      if (isOverHandle || (event.target as Element | null)?.closest("[data-toolbar-handle]")) {
-        clearRevealTimeout();
-        return;
-      }
-
-      if (window.innerHeight - event.clientY <= desktopRevealDistance) {
-        scheduleReveal();
-      } else {
-        clearRevealTimeout();
-        scheduleHide();
-      }
-    }
-
     function handleRevealTools(event: CustomEvent<RevealToolsDetail>) {
       if (event.detail?.focus === false) {
-        revealTemporarily();
+        onReveal();
         return;
       }
 
       revealAndFocus(event.detail?.itemId);
     }
 
-    if (autoHide) {
-      window.addEventListener("pointermove", handlePointerMove, { passive: true });
-    }
     window.addEventListener("awthor:reveal-tools", handleRevealTools);
 
     return () => {
-      clearHideTimeout();
-      clearRevealTimeout();
-      if (autoHide) {
-        window.removeEventListener("pointermove", handlePointerMove);
-      }
       window.removeEventListener("awthor:reveal-tools", handleRevealTools);
     };
-  }, [
-    autoHide,
-    clearHideTimeout,
-    clearRevealTimeout,
-    isCoarsePointer,
-    revealAndFocus,
-    revealTemporarily,
-    scheduleHide,
-    scheduleReveal,
-  ]);
+  }, [onReveal, revealAndFocus]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Alt") {
         setShowShortcuts(true);
-        showToolbar();
+        onInteractionChange("shortcut", true);
+        onReveal();
         return;
       }
 
@@ -380,7 +166,7 @@ export function FloatingToolbar({
       event.preventDefault();
       activeIndexRef.current = itemIndex;
       setActiveIndex(itemIndex);
-      showToolbar();
+      onReveal();
       requestAnimationFrame(() => {
         contentRef.current
           ?.querySelector<HTMLElement>(`[data-toolbar-index="${itemIndex}"]`)
@@ -390,7 +176,7 @@ export function FloatingToolbar({
 
     function hideShortcutHints() {
       setShowShortcuts(false);
-      scheduleHide();
+      onInteractionChange("shortcut", false);
     }
 
     function handleKeyUp(event: KeyboardEvent) {
@@ -406,8 +192,9 @@ export function FloatingToolbar({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", hideShortcutHints);
+      onInteractionChange("shortcut", false);
     };
-  }, [scheduleHide, showToolbar]);
+  }, [onInteractionChange, onReveal]);
 
   function handleToolbarKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
@@ -463,17 +250,21 @@ export function FloatingToolbar({
           inert={!isVisible}
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) {
-              scheduleHide();
+              onInteractionChange("focus", false);
             }
           }}
-          onFocus={showToolbar}
+          onFocus={(event) => {
+            if ((event.target as HTMLElement).matches(":focus-visible")) {
+              onInteractionChange("focus", true);
+              onReveal();
+            }
+          }}
           onPointerEnter={() => {
-            isPointerInsideRef.current = true;
-            showToolbar();
+            onInteractionChange("pointer", true);
+            onReveal();
           }}
           onPointerLeave={() => {
-            isPointerInsideRef.current = false;
-            scheduleHide();
+            onInteractionChange("pointer", false);
           }}
           ref={contentRef}
         >
@@ -634,14 +425,6 @@ function ToolbarItem({
 function firstEnabledIndex(items: readonly FloatingToolbarItem[]) {
   const index = items.findIndex((item) => !item.disabled);
   return index < 0 ? 0 : index;
-}
-
-function scrollPosition(target: EventTarget): number | null {
-  if (target === document || target === document.documentElement || target === document.body) {
-    return window.scrollY;
-  }
-
-  return target instanceof HTMLElement ? target.scrollTop : null;
 }
 
 function enabledControls(container: HTMLElement | null): HTMLElement[] {

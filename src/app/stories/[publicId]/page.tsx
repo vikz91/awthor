@@ -5,6 +5,7 @@ import {
   getPublishedStoryByPublicId,
   listPublishedStoriesInSeries,
 } from "@/lib/database/published-stories";
+import { createPublishedStoryMetadata } from "@/lib/published-story-metadata";
 import { PublicStoryReader } from "./public-story-reader";
 
 type StoryPageProps = {
@@ -15,15 +16,15 @@ export async function generateMetadata({ params }: StoryPageProps): Promise<Meta
   const { publicId } = await params;
   const story = await getStory(publicId);
 
-  if (!story) return { robots: { index: false, follow: false } };
+  if (!story) {
+    return {
+      description: "This published Awthor story is no longer available.",
+      robots: { index: false, follow: false },
+      title: "Story unavailable",
+    };
+  }
 
-  return {
-    description:
-      story.book.subtitle ||
-      `Read ${story.book.title} by ${story.book.author || "an Awthor writer"}.`,
-    robots: { index: false, follow: false },
-    title: story.book.title,
-  };
+  return createPublishedStoryMetadata(story);
 }
 
 export default async function PublicStoryPage({ params }: StoryPageProps) {

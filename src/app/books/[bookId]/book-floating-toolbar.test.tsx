@@ -9,17 +9,19 @@ function renderToolbar(mode: WorkspaceMode, notebookMode: boolean) {
       activeTool={null}
       bookId="book-1"
       chapters={[]}
+      chromeVisible
       currentChapterId="chapter-1"
       documentLayout="seamless"
       draft=""
       inspectorOpen={false}
-      menuOpen={false}
       mode={mode}
       notebookMode={notebookMode}
       onActiveToolChange={() => undefined}
       onApplyDraft={() => undefined}
       onBeforeToolOpen={async () => undefined}
       onChapterUpdated={() => undefined}
+      onChromeInteractionChange={() => undefined}
+      onChromeReveal={() => undefined}
       onDocumentLayoutChange={async () => undefined}
       onNotebookModeChange={async () => undefined}
       onProofreadingPreferencesChange={async () => undefined}

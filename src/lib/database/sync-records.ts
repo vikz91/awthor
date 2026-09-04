@@ -3,6 +3,7 @@ import "server-only";
 import type { ClientSession, Collection, Db } from "mongodb";
 import { compareSyncRecords, createSyncContentHash } from "@/lib/sync/records";
 import { type SyncedRecord, type SyncRecord, syncedRecordSchema } from "@/lib/sync/types";
+import { removePublishedStory } from "./published-stories";
 
 type StoredSyncRecord = SyncedRecord & { userId: string };
 type SyncCounter = { _id: "syncRecords"; value: number };
@@ -91,6 +92,7 @@ export async function pushSyncRecords(
 ) {
   const recordsCollection = collection(database);
   const winners: SyncedRecord[] = [];
+  const bookWinners = new Map<string, SyncedRecord>();
   let cursor = 0;
 
   for (const record of records) {
@@ -127,7 +129,16 @@ export async function pushSyncRecords(
       );
     }
     winners.push(winner);
+    if (winner.recordType === "book") bookWinners.set(winner.recordId, winner);
     cursor = Math.max(cursor, winner.serverRevision);
+  }
+
+  for (const winner of bookWinners.values()) {
+    if (winner.deleted) {
+      await removePublishedStory(database, userId, winner.recordId, {
+        session: options.session,
+      });
+    }
   }
 
   return { cursor, records: winners };

@@ -29,9 +29,8 @@ type BookFloatingToolbarProps = {
   documentLayout: DocumentLayout;
   draft: string;
   inspectorOpen: boolean;
-  menuOpen: boolean;
   notebookMode: boolean;
-  readingChromeVisible?: boolean;
+  chromeVisible: boolean;
   mode: WorkspaceMode;
   activeTool: WorkspaceTool;
   onActiveToolChange: (tool: WorkspaceTool) => void;
@@ -40,7 +39,8 @@ type BookFloatingToolbarProps = {
   onChapterUpdated: (chapter: Chapter) => void;
   onDocumentLayoutChange: (layout: DocumentLayout) => Promise<void>;
   onNotebookModeChange: (enabled: boolean) => Promise<void>;
-  onReadingChromeVisibleChange?: (visible: boolean) => void;
+  onChromeInteractionChange: (source: string, active: boolean) => void;
+  onChromeReveal: () => void;
   onBeforeToolOpen: () => Promise<void>;
   onProofreadingPreferencesChange: (preferences: BookProofreadingSettings) => Promise<void>;
   onToolDirtyChange: (tool: Exclude<WorkspaceTool, null>, dirty: boolean) => void;
@@ -52,21 +52,21 @@ export function BookFloatingToolbar({
   activeTool,
   bookId,
   chapters,
+  chromeVisible,
   currentChapterId,
   documentLayout,
   draft,
   inspectorOpen,
-  menuOpen,
   notebookMode,
-  readingChromeVisible,
   mode,
   onActiveToolChange,
   onApplyDraft,
   onBeforeToolOpen,
   onChapterUpdated,
+  onChromeInteractionChange,
+  onChromeReveal,
   onDocumentLayoutChange,
   onNotebookModeChange,
-  onReadingChromeVisibleChange,
   onProofreadingPreferencesChange,
   onRequestWrite,
   onRestoreEditorFocus,
@@ -80,6 +80,17 @@ export function BookFloatingToolbar({
   const [showCounts, setShowCounts] = useState(false);
   const previousToolRef = useRef<WorkspaceTool>(activeTool);
   const counts = useMemo(() => countManuscript(draft), [draft]);
+  const handleChromeInteraction = useCallback(
+    (source: "focus" | "pointer" | "shortcut", active: boolean) => {
+      onChromeInteractionChange(`bottom-${source}`, active);
+    },
+    [onChromeInteractionChange],
+  );
+
+  useEffect(() => {
+    onChromeInteractionChange("bottom-opening-tool", openingTool !== null);
+    return () => onChromeInteractionChange("bottom-opening-tool", false);
+  }, [onChromeInteractionChange, openingTool]);
 
   useEffect(() => {
     if (previousToolRef.current && !activeTool && !inspectorOpen) {
@@ -268,16 +279,15 @@ export function BookFloatingToolbar({
           ) : null
         }
         announcement={announcement}
-        autoHide
         className={
           inspectorOpen ? "min-[72rem]:right-[var(--workspace-inspector-width)]" : undefined
         }
         collapsedLabel="Tools"
-        heldOpen={activeTool !== null || openingTool !== null || menuOpen}
         items={items}
         label="Book tools"
-        onVisibleChange={onReadingChromeVisibleChange}
-        visible={readingChromeVisible}
+        onInteractionChange={handleChromeInteraction}
+        onReveal={onChromeReveal}
+        visible={chromeVisible}
       />
       {activeTool === "spelling" ? (
         <ProofreadingDrawer

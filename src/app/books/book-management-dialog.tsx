@@ -429,8 +429,9 @@ export function DeleteBookDialog({ book, open, onOpenChange, onDeleted }: Delete
             Delete “{book?.title}”?
           </DialogTitle>
           <DialogDescription>
-            This permanently removes the book, manuscript, characters, and reading position from
-            this browser. This action cannot be undone.
+            This permanently removes the book, manuscript, characters, and reading position. If the
+            book is published, its public version will be removed when this deletion syncs. This
+            action cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
