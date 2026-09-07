@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   getMcpAuthorizationServerMetadata,
   getMcpProtectedResourceMetadata,
+  getMcpRequestUrls,
   isAllowedMcpOrigin,
   resolveMcpConfiguration,
 } from "./config";
@@ -40,7 +41,7 @@ describe("remote MCP configuration", () => {
 
     expect(getMcpProtectedResourceMetadata(configuration)).toMatchObject({
       authorization_servers: ["https://clerk.example.test"],
-      resource: "https://awthor.example/api/mcp",
+      resource: "https://awthor.example/mcp",
       scopes_supported: ["awthor.read", "awthor.write", "awthor.publish"],
     });
     expect(getMcpAuthorizationServerMetadata(configuration)).toMatchObject({
@@ -48,6 +49,16 @@ describe("remote MCP configuration", () => {
       issuer: "https://clerk.example.test",
       token_endpoint: "https://clerk.example.test/oauth/token",
     });
+    expect(getMcpRequestUrls(new Request("https://awthor.example/mcp"), configuration)).toEqual({
+      metadataUrl: "https://awthor.example/.well-known/oauth-protected-resource",
+      resourceUrl: "https://awthor.example/mcp",
+    });
+    expect(getMcpRequestUrls(new Request("https://awthor.example/api/mcp"), configuration)).toEqual(
+      {
+        metadataUrl: "https://awthor.example/.well-known/oauth-protected-resource/api/mcp",
+        resourceUrl: "https://awthor.example/api/mcp",
+      },
+    );
   });
 
   test("allows non-browser MCP clients while rejecting unknown browser origins", () => {

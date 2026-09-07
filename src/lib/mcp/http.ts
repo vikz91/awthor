@@ -17,12 +17,15 @@ export function validateMcpRequestOrigin(request: Request): Response | null {
   });
 }
 
-export function createMcpAuthenticationError(failure: McpAuthenticationFailure): Response {
+export function createMcpAuthenticationError(
+  failure: McpAuthenticationFailure,
+  metadataUrl = mcpConfiguration.metadataUrl,
+): Response {
   const headers = new Headers({ "Cache-Control": "no-store" });
-  if ((failure.status === 401 || failure.status === 403) && mcpConfiguration.metadataUrl) {
+  if ((failure.status === 401 || failure.status === 403) && metadataUrl) {
     headers.set(
       "WWW-Authenticate",
-      `Bearer error="${failure.error}", error_description="${failure.message}", resource_metadata="${mcpConfiguration.metadataUrl}"`,
+      `Bearer resource_metadata="${metadataUrl}", error="${failure.error}", error_description="${failure.message}"`,
     );
   }
 

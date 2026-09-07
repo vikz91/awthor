@@ -24,4 +24,19 @@ describe("MCP HTTP boundary", () => {
     expect(response.headers.get("www-authenticate")).toBeNull();
     expect((await response.json()).jsonrpc).toBe("2.0");
   });
+
+  test("advertises the request endpoint's protected-resource metadata", () => {
+    const response = createMcpAuthenticationError(
+      {
+        error: "invalid_token",
+        message: "A Bearer access token is required.",
+        status: 401,
+      },
+      "https://awthor.example/.well-known/oauth-protected-resource",
+    );
+
+    expect(response.headers.get("www-authenticate")).toBe(
+      'Bearer resource_metadata="https://awthor.example/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Bearer access token is required."',
+    );
+  });
 });

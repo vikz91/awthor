@@ -3,10 +3,7 @@ import { getMcpProtectedResourceMetadata, mcpConfiguration } from "@/lib/mcp/con
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  const metadata = getMcpProtectedResourceMetadata(
-    mcpConfiguration,
-    mcpConfiguration.legacyResourceUrl,
-  );
+  const metadata = getMcpProtectedResourceMetadata();
   if (!mcpConfiguration.enabled || !metadata) {
     return Response.json({ error: "Remote MCP is not configured." }, { status: 404 });
   }

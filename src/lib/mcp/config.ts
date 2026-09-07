@@ -6,6 +6,8 @@ export type McpConfiguration = {
   allowedOrigins: string[];
   authorizationServerUrl: string | null;
   enabled: boolean;
+  legacyMetadataUrl: string | null;
+  legacyResourceUrl: string | null;
   metadataUrl: string | null;
   resourceUrl: string | null;
   siteUrl: string | null;
@@ -57,13 +59,19 @@ export function resolveMcpConfiguration(environment: Environment): McpConfigurat
     environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() && environment.CLERK_SECRET_KEY?.trim(),
   );
   const mongoConfigured = Boolean(environment.MONGODB_URI?.trim());
-  const resourceUrl = siteUrl ? `${siteUrl}/api/mcp` : null;
-  const metadataUrl = siteUrl ? `${siteUrl}/.well-known/oauth-protected-resource/api/mcp` : null;
+  const resourceUrl = siteUrl ? `${siteUrl}/mcp` : null;
+  const metadataUrl = siteUrl ? `${siteUrl}/.well-known/oauth-protected-resource` : null;
+  const legacyResourceUrl = siteUrl ? `${siteUrl}/api/mcp` : null;
+  const legacyMetadataUrl = siteUrl
+    ? `${siteUrl}/.well-known/oauth-protected-resource/api/mcp`
+    : null;
 
   return {
     allowedOrigins: allowedOrigins(environment.MCP_ALLOWED_ORIGINS, siteUrl),
     authorizationServerUrl,
     enabled: Boolean(clerkConfigured && mongoConfigured && siteUrl && authorizationServerUrl),
+    legacyMetadataUrl,
+    legacyResourceUrl,
     metadataUrl,
     resourceUrl,
     siteUrl,
@@ -73,16 +81,33 @@ export function resolveMcpConfiguration(environment: Environment): McpConfigurat
 
 export const mcpConfiguration = resolveMcpConfiguration(process.env);
 
-export function getMcpProtectedResourceMetadata(configuration = mcpConfiguration) {
-  if (!configuration.resourceUrl || !configuration.authorizationServerUrl) return null;
+export function getMcpProtectedResourceMetadata(
+  configuration = mcpConfiguration,
+  resourceUrl = configuration.resourceUrl,
+) {
+  if (!resourceUrl || !configuration.authorizationServerUrl) return null;
 
   return {
     authorization_servers: [configuration.authorizationServerUrl],
     bearer_methods_supported: ["header"],
-    resource: configuration.resourceUrl,
+    resource: resourceUrl,
+    resource_documentation: configuration.siteUrl ?? undefined,
     resource_name: "Awthor Remote MCP",
     scopes_supported: configuration.supportedScopes,
   };
+}
+
+export function getMcpRequestUrls(
+  request: Request,
+  configuration = mcpConfiguration,
+): { metadataUrl: string | null; resourceUrl: string | null } {
+  const isLegacyEndpoint = new URL(request.url).pathname.startsWith("/api/mcp");
+  return isLegacyEndpoint
+    ? {
+        metadataUrl: configuration.legacyMetadataUrl,
+        resourceUrl: configuration.legacyResourceUrl,
+      }
+    : { metadataUrl: configuration.metadataUrl, resourceUrl: configuration.resourceUrl };
 }
 
 export function getMcpAuthorizationServerMetadata(configuration = mcpConfiguration) {

@@ -19,7 +19,9 @@ import type {
 import { mcpConfiguration } from "./config";
 
 const maxManuscriptCharacters = 2_000_000;
+const maxSearchResults = 50;
 const identifier = z.string().trim().min(1).max(128);
+const searchDocumentIdentifier = z.string().trim().min(1).max(300);
 const title = z.string().trim().min(1).max(200);
 const author = z.string().trim().min(1).max(200);
 const markdown = z.string().max(maxManuscriptCharacters);
@@ -29,6 +31,55 @@ const optionalHttpUrl = z
   .refine((value) => value === undefined || value === null || /^https?:\/\//u.test(value), {
     message: "URLs must use HTTP or HTTPS.",
   });
+
+const readOnlyAnnotations = {
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+  readOnlyHint: true,
+} as const;
+const createAnnotations = {
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+  readOnlyHint: false,
+} as const;
+const updateAnnotations = {
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+  readOnlyHint: false,
+} as const;
+const deleteAnnotations = {
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false,
+  readOnlyHint: false,
+} as const;
+const publishAnnotations = {
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+  readOnlyHint: false,
+} as const;
+const unpublishAnnotations = {
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true,
+  readOnlyHint: false,
+} as const;
+
+function oauthToolMeta(
+  scopes: readonly string[],
+  invoking: string,
+  invoked: string,
+): Record<string, unknown> {
+  return {
+    "openai/toolInvocation/invoked": invoked,
+    "openai/toolInvocation/invoking": invoking,
+    securitySchemes: [{ scopes: [...scopes], type: "oauth2" }],
+  };
+}
 
 const characterInput = z
   .object({
@@ -129,6 +180,7 @@ export type RemoteWorkspaceService = {
 export type CreateRemoteMcpServerOptions = {
   scopes: readonly string[];
   service: RemoteWorkspaceService;
+  siteUrl?: string;
 };
 
 export class RemoteMcpToolError extends Error {
@@ -149,27 +201,65 @@ export class RemoteMcpToolError extends Error {
 export function createRemoteMcpServer({
   scopes,
   service,
+  siteUrl = mcpConfiguration.siteUrl ?? "http://localhost:3000",
 }: CreateRemoteMcpServerOptions): McpServer {
-  const server = new McpServer({ name: "awthor", version: "1.0.0" });
+  const server = new McpServer(
+    {
+      description: "Read and edit a writer's private synced Awthor books and manuscripts.",
+      name: "awthor",
+      title: "Awthor",
+      version: "1.1.0",
+      websiteUrl: siteUrl,
+    },
+    {
+      instructions:
+        "A book is the top-level private work; chapters contain its story manuscript. List or search before reading or updating so you have stable IDs. Publishing creates an unlisted public snapshot and does not happen automatically when the private book changes.",
+    },
+  );
   const canRead = scopes.includes("awthor.read");
   const canWrite = scopes.includes("awthor.write");
   const canPublish = scopes.includes("awthor.publish");
 
-  if (canRead) registerReadTools(server, service);
+  if (canRead) registerReadTools(server, service, siteUrl);
   if (canWrite) registerWriteTools(server, service);
   if (canPublish && canWrite) registerPublishingTools(server, service);
 
   return server;
 }
 
-function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
+function registerReadTools(server: McpServer, service: RemoteWorkspaceService, siteUrl: string) {
+  server.registerTool(
+    "search",
+    {
+      title: "Search synced books and stories",
+      description:
+        "Use this when the user wants to find a synced Awthor book or a story chapter by title, metadata, or manuscript text.",
+      inputSchema: z.object({ query: z.string().trim().min(1).max(500) }).strict(),
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Searching Awthor…", "Search complete"),
+    },
+    async ({ query }) => searchResult(service, siteUrl, query),
+  );
+  server.registerTool(
+    "fetch",
+    {
+      title: "Fetch a synced book or story",
+      description:
+        "Use this after search when the user wants the complete metadata for a book or the private Markdown for one story chapter.",
+      inputSchema: z.object({ id: searchDocumentIdentifier }).strict(),
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Reading Awthor…", "Story ready"),
+    },
+    async ({ id }) => fetchResult(service, siteUrl, id),
+  );
   server.registerTool(
     "awthor_list_books",
     {
       title: "List synced Awthor books",
       description:
-        "List books already synced to this signed-in Awthor account. Manuscript text is not included.",
-      annotations: { readOnlyHint: true, openWorldHint: false },
+        "Use this when the user wants to browse books already synced to this signed-in Awthor account. Manuscript text is not included.",
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Listing books…", "Books ready"),
     },
     async () =>
       result(await service.listBooks().then((books) => ({ books: books.map(summarizeBook) }))),
@@ -179,9 +269,10 @@ function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
     {
       title: "Read synced book metadata",
       description:
-        "Read a synced book and its ordered chapter metadata. Manuscript text is not included.",
+        "Use this when the user wants one synced book and its ordered story-chapter metadata. Manuscript text is not included.",
       inputSchema: z.object({ bookId: identifier }).strict(),
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Reading book…", "Book ready"),
     },
     async ({ bookId }) => {
       const book = await requireBook(service, bookId);
@@ -193,13 +284,30 @@ function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
     },
   );
   server.registerTool(
+    "awthor_list_chapters",
+    {
+      title: "List a book's story chapters",
+      description:
+        "Use this when the user wants to list the ordered story chapters in one synced book without reading manuscript text.",
+      inputSchema: z.object({ bookId: identifier }).strict(),
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Listing chapters…", "Chapters ready"),
+    },
+    async ({ bookId }) => {
+      await requireBook(service, bookId);
+      const chapters = await service.listChapters(bookId);
+      return result({ chapters: chapters.map((chapter) => summarizeChapter(bookId, chapter)) });
+    },
+  );
+  server.registerTool(
     "awthor_get_chapter",
     {
       title: "Read synced chapter Markdown",
       description:
-        "Return one explicitly requested synced chapter, including its private Markdown manuscript. Calling this tool sends that manuscript to the connected MCP client.",
+        "Use this when the user wants to read one story chapter. It returns the private Markdown manuscript to the connected MCP client.",
       inputSchema: z.object({ bookId: identifier, chapterId: identifier }).strict(),
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Reading chapter…", "Chapter ready"),
     },
     async ({ bookId, chapterId }) => {
       const chapter = await requireChapter(service, bookId, chapterId);
@@ -211,11 +319,12 @@ function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
     {
       title: "List synced characters",
       description:
-        "List character dossiers for one synced book. Returned data is private author content.",
+        "Use this when the user wants the character dossiers for one synced book. Returned data is private author content.",
       inputSchema: z
         .object({ bookId: identifier, includeHidden: z.boolean().default(false) })
         .strict(),
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Listing characters…", "Characters ready"),
     },
     async ({ bookId, includeHidden }) => {
       await requireBook(service, bookId);
@@ -231,9 +340,11 @@ function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
     "awthor_get_character",
     {
       title: "Read a synced character",
-      description: "Read one private character dossier from a synced book.",
+      description:
+        "Use this when the user wants to read one private character dossier from a synced book.",
       inputSchema: z.object({ bookId: identifier, characterId: identifier }).strict(),
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Reading character…", "Character ready"),
     },
     async ({ bookId, characterId }) =>
       result({ character: await requireCharacter(service, bookId, characterId) }),
@@ -243,8 +354,9 @@ function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
     {
       title: "Read synced author and workspace settings",
       description:
-        "Read the synced author profile, theme, and editor settings. This does not include manuscripts.",
-      annotations: { readOnlyHint: true, openWorldHint: false },
+        "Use this when the user wants the synced author profile, theme, or editor settings. This does not include manuscripts.",
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Reading settings…", "Settings ready"),
     },
     async () => {
       const workspace = await service.getWorkspace();
@@ -260,8 +372,9 @@ function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
     {
       title: "Export synced Awthor workspace",
       description:
-        "Return an unencrypted portable backup of the full synced workspace. It includes private manuscripts and settings, so it is sent to the connected MCP client.",
-      annotations: { readOnlyHint: true, openWorldHint: false },
+        "Use this when the user explicitly wants an unencrypted portable backup of the full synced workspace, including private manuscripts and settings.",
+      annotations: readOnlyAnnotations,
+      _meta: oauthToolMeta(["awthor.read"], "Exporting workspace…", "Export ready"),
     },
     async () => {
       const data = await service.exportData();
@@ -276,12 +389,117 @@ function registerReadTools(server: McpServer, service: RemoteWorkspaceService) {
   );
 }
 
+type AwthorSearchItem = { id: string; title: string; url: string };
+
+function bookDocumentId(bookId: string) {
+  return `book:${encodeURIComponent(bookId)}`;
+}
+
+function storyDocumentId(bookId: string, chapterId: string) {
+  return `story:${encodeURIComponent(bookId)}:${encodeURIComponent(chapterId)}`;
+}
+
+function bookUrl(siteUrl: string, bookId: string, chapterId?: string) {
+  const url = new URL(`/books/${encodeURIComponent(bookId)}`, siteUrl);
+  if (chapterId) url.searchParams.set("chapter", chapterId);
+  return url.toString();
+}
+
+function standardTextResult(value: unknown) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(value) }] };
+}
+
+async function searchResult(service: RemoteWorkspaceService, siteUrl: string, query: string) {
+  const workspace = await service.getWorkspace();
+  const needle = query.toLocaleLowerCase();
+  const results: AwthorSearchItem[] = [];
+
+  for (const book of workspace.books) {
+    const bookText = [book.title, book.author, book.genre, book.seriesName, book.synopsis]
+      .join("\n")
+      .toLocaleLowerCase();
+    if (bookText.includes(needle)) {
+      results.push({
+        id: bookDocumentId(book.id),
+        title: book.title,
+        url: bookUrl(siteUrl, book.id),
+      });
+    }
+
+    for (const chapter of workspace.chapters[book.id] ?? []) {
+      const storyText = [chapter.title, chapter.summary, chapter.pov, chapter.body]
+        .join("\n")
+        .toLocaleLowerCase();
+      if (!storyText.includes(needle)) continue;
+      results.push({
+        id: storyDocumentId(book.id, chapter.id),
+        title: `${book.title} — ${chapter.title}`,
+        url: bookUrl(siteUrl, book.id, chapter.id),
+      });
+      if (results.length >= maxSearchResults) return standardTextResult({ results });
+    }
+
+    if (results.length >= maxSearchResults) return standardTextResult({ results });
+  }
+
+  return standardTextResult({ results });
+}
+
+async function fetchResult(service: RemoteWorkspaceService, siteUrl: string, documentId: string) {
+  const [kind, ...encodedParts] = documentId.split(":");
+  try {
+    if (kind === "book" && encodedParts.length === 1) {
+      const bookId = decodeURIComponent(encodedParts[0]);
+      const book = await requireBook(service, bookId);
+      const chapters = await service.listChapters(bookId);
+      return standardTextResult({
+        id: documentId,
+        metadata: { kind: "book" },
+        text: JSON.stringify(
+          {
+            book: summarizeBook(book),
+            chapters: chapters.map((chapter) => summarizeChapter(bookId, chapter)),
+          },
+          null,
+          2,
+        ),
+        title: book.title,
+        url: bookUrl(siteUrl, bookId),
+      });
+    }
+
+    if (kind === "story" && encodedParts.length === 2) {
+      const [bookId, chapterId] = encodedParts.map((part) => decodeURIComponent(part));
+      const book = await requireBook(service, bookId);
+      const chapter = await requireChapter(service, bookId, chapterId);
+      return standardTextResult({
+        id: documentId,
+        metadata: { bookId, chapterId, kind: "story" },
+        text: chapter.body,
+        title: `${book.title} — ${chapter.title}`,
+        url: bookUrl(siteUrl, bookId, chapterId),
+      });
+    }
+  } catch (error) {
+    if (error instanceof URIError) {
+      throw new RemoteMcpToolError("INVALID_ARGUMENT", "The search result ID is malformed.");
+    }
+    throw error;
+  }
+
+  throw new RemoteMcpToolError(
+    "INVALID_ARGUMENT",
+    "Use an exact book:… or story:… ID returned by the search tool.",
+  );
+}
+
 function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) {
   server.registerTool(
     "awthor_create_book",
     {
       title: "Create a synced Awthor book",
-      description: "Create a book and its initial empty chapter in the signed-in synced workspace.",
+      description:
+        "Use this when the user wants to create a book and its initial empty story chapter in the signed-in synced workspace.",
       inputSchema: z
         .object({
           author: author.optional(),
@@ -296,7 +514,8 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
           title,
         })
         .strict(),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: createAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Creating book…", "Book created"),
     },
     async (input) => {
       const { book, initialChapter } = await service.createBook(input);
@@ -311,7 +530,7 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     {
       title: "Update synced book metadata",
       description:
-        "Update the title, author, genre, series name, or remote cover URL for a synced book.",
+        "Use this when the user wants to update the title, author, genre, series name, or remote cover URL for a synced book.",
       inputSchema: z
         .object({
           author: author.optional(),
@@ -328,7 +547,8 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
         })
         .strict()
         .refine(hasBookUpdate, "Provide at least one book field to update."),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: updateAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Updating book…", "Book updated"),
     },
     async ({ bookId, ...input }) => result({ book: await service.updateBook(bookId, input) }),
   );
@@ -337,9 +557,10 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     {
       title: "Delete synced Awthor book",
       description:
-        "Permanently delete a synced book, every chapter, and every character from this account.",
+        "Use this only when the user explicitly wants to permanently delete a synced book, every chapter, and every character from this account.",
       inputSchema: z.object({ bookId: identifier }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      annotations: deleteAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Deleting book…", "Book deleted"),
     },
     async ({ bookId }) => {
       await service.deleteBook(bookId);
@@ -351,11 +572,12 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     {
       title: "Create synced chapter",
       description:
-        "Create a Markdown chapter in a synced book. Any manuscript supplied here is sent to the connected MCP client and stored in the signed-in cloud workspace.",
+        "Use this when the user wants to write a new story chapter in a synced book. Supplied Markdown is stored in the signed-in cloud workspace.",
       inputSchema: z
         .object({ bookId: identifier, markdown: markdown.optional(), title: title.optional() })
         .strict(),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: createAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Creating chapter…", "Chapter created"),
     },
     async ({ bookId, markdown: body, title: chapterTitle }) =>
       result({ chapter: await service.createChapter(bookId, { body, title: chapterTitle }) }),
@@ -365,7 +587,7 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     {
       title: "Update synced chapter",
       description:
-        "Replace a chapter title or Markdown manuscript in the synced workspace. Any manuscript supplied here is sent to the connected MCP client and stored in the signed-in cloud workspace.",
+        "Use this when the user wants to update a story chapter title or replace its Markdown manuscript in the synced workspace.",
       inputSchema: z
         .object({
           bookId: identifier,
@@ -375,7 +597,8 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
         })
         .strict()
         .refine(hasChapterUpdate, "Provide a chapter title or Markdown manuscript."),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: updateAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Updating chapter…", "Chapter updated"),
     },
     async ({ bookId, chapterId, markdown: body, title: chapterTitle }) =>
       result({
@@ -386,11 +609,13 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     "awthor_reorder_chapters",
     {
       title: "Reorder synced chapters",
-      description: "Set the complete ordered chapter ID list for a synced book.",
+      description:
+        "Use this when the user wants to set the complete ordered story-chapter ID list for a synced book.",
       inputSchema: z
         .object({ bookId: identifier, orderedChapterIds: z.array(identifier).min(1).max(10_000) })
         .strict(),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: updateAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Reordering chapters…", "Chapters reordered"),
     },
     async ({ bookId, orderedChapterIds }) =>
       result({ chapters: await service.reorderChapters(bookId, orderedChapterIds) }),
@@ -399,9 +624,11 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     "awthor_delete_chapter",
     {
       title: "Delete synced chapter",
-      description: "Permanently delete a chapter from a synced book.",
+      description:
+        "Use this only when the user explicitly wants to permanently delete a story chapter from a synced book.",
       inputSchema: z.object({ bookId: identifier, chapterId: identifier }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      annotations: deleteAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Deleting chapter…", "Chapter deleted"),
     },
     async ({ bookId, chapterId }) => {
       await service.deleteChapter(bookId, chapterId);
@@ -412,7 +639,7 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     "awthor_create_character",
     {
       title: "Create synced character",
-      description: "Create a character dossier in a synced book.",
+      description: "Use this when the user wants to create a character dossier in a synced book.",
       inputSchema: z
         .object({
           bookId: identifier,
@@ -420,7 +647,8 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
           name: z.string().trim().min(1).max(200),
         })
         .strict(),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: createAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Creating character…", "Character created"),
     },
     async ({ bookId, ...input }) =>
       result({ character: await service.createCharacter(bookId, input) }),
@@ -429,12 +657,13 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     "awthor_update_character",
     {
       title: "Update synced character",
-      description: "Update a character dossier in a synced book.",
+      description: "Use this when the user wants to update a character dossier in a synced book.",
       inputSchema: z
         .object({ bookId: identifier, characterId: identifier, ...characterInput.shape })
         .strict()
         .refine(hasCharacterUpdate, "Provide at least one character field to update."),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: updateAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Updating character…", "Character updated"),
     },
     async ({ bookId, characterId, ...input }) =>
       result({ character: await service.updateCharacter(bookId, characterId, input) }),
@@ -443,9 +672,11 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     "awthor_delete_character",
     {
       title: "Delete synced character",
-      description: "Permanently delete a character dossier from a synced book.",
+      description:
+        "Use this only when the user explicitly wants to permanently delete a character dossier from a synced book.",
       inputSchema: z.object({ bookId: identifier, characterId: identifier }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      annotations: deleteAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Deleting character…", "Character deleted"),
     },
     async ({ bookId, characterId }) => {
       await service.deleteCharacter(bookId, characterId);
@@ -457,12 +688,13 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     {
       title: "Update synced chapter arc",
       description:
-        "Update the stage, tension, goal, conflict, or outcome for a chapter's private story arc.",
+        "Use this when the user wants to update the stage, tension, goal, conflict, or outcome for a chapter's private story arc.",
       inputSchema: z
         .object({ bookId: identifier, chapterId: identifier, ...chapterArcInput.shape })
         .strict()
         .refine(hasArcUpdate, "Provide at least one chapter-arc field to update."),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: updateAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Updating story arc…", "Story arc updated"),
     },
     async ({ bookId, chapterId, ...input }) =>
       result({ arc: (await service.updateChapter(bookId, chapterId, { arc: input })).arc }),
@@ -472,7 +704,7 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     {
       title: "Update synced author and workspace settings",
       description:
-        "Update the synced author profile, Paper/Stone theme, or editor settings. This does not update manuscript content.",
+        "Use this when the user wants to update the synced author profile, Paper/Stone theme, or editor settings. This does not update manuscript content.",
       inputSchema: z
         .object({
           profile: z.unknown().optional(),
@@ -487,7 +719,8 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
             input.theme !== undefined,
           "Provide profile, settings, or theme.",
         ),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: updateAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Updating settings…", "Settings updated"),
     },
     async ({ profile, settings, theme }) => {
       const changes: Record<string, unknown> = {};
@@ -504,9 +737,10 @@ function registerWriteTools(server: McpServer, service: RemoteWorkspaceService) 
     {
       title: "Replace synced Awthor workspace from backup",
       description:
-        "Replace this account's synced workspace from an unencrypted Awthor backup. The full supplied backup, including manuscripts, is sent to the connected MCP client. This cannot be undone.",
+        "Use this only when the user explicitly wants to replace this account's synced workspace from an unencrypted Awthor backup. This cannot be undone.",
       inputSchema: z.object({ backupJson: z.string().min(1).max(maxBackupFileBytes) }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      annotations: deleteAnnotations,
+      _meta: oauthToolMeta(["awthor.write"], "Importing workspace…", "Workspace replaced"),
     },
     async ({ backupJson }) => {
       const bytes = new TextEncoder().encode(backupJson);
@@ -528,9 +762,14 @@ function registerPublishingTools(server: McpServer, service: RemoteWorkspaceServ
     {
       title: "Publish an unlisted story",
       description:
-        "Create or refresh an unlisted public reader link from this book's current synced snapshot. The link is not indexed or listed, but anyone with it can read the snapshot. Normal private edits do not change it until it is published again.",
+        "Use this when the user explicitly wants to create or refresh an unlisted public story from the book's current synced snapshot. Anyone with the link can read it.",
       inputSchema: z.object({ bookId: identifier }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: publishAnnotations,
+      _meta: oauthToolMeta(
+        ["awthor.write", "awthor.publish"],
+        "Publishing story…",
+        "Story published",
+      ),
     },
     async ({ bookId }) => {
       const story = await service.publishBook(bookId);
@@ -545,9 +784,14 @@ function registerPublishingTools(server: McpServer, service: RemoteWorkspaceServ
     {
       title: "Unpublish an Awthor story",
       description:
-        "Disable the existing unlisted public reader link without deleting the private synced book.",
+        "Use this only when the user explicitly wants to disable the unlisted public story link without deleting the private synced book.",
       inputSchema: z.object({ bookId: identifier }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      annotations: unpublishAnnotations,
+      _meta: oauthToolMeta(
+        ["awthor.write", "awthor.publish"],
+        "Unpublishing story…",
+        "Story unpublished",
+      ),
     },
     async ({ bookId }) => {
       await service.unpublishBook(bookId);

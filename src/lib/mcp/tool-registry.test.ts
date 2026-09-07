@@ -232,9 +232,68 @@ describe("remote MCP tool registry", () => {
     const names = tools.tools.map((tool) => tool.name);
 
     expect(names).toContain("awthor_list_books");
+    expect(names).toContain("awthor_list_chapters");
     expect(names).toContain("awthor_export_data");
+    expect(names).toContain("search");
+    expect(names).toContain("fetch");
     expect(names).not.toContain("awthor_create_book");
     expect(names).not.toContain("awthor_publish_book");
+    await server.close();
+  });
+
+  test("advertises ChatGPT-compatible OAuth metadata and complete safety annotations", async () => {
+    const service = createService();
+    const { client, server } = await connect(service, [
+      "awthor.read",
+      "awthor.write",
+      "awthor.publish",
+    ]);
+    const { tools } = await client.listTools();
+
+    for (const tool of tools) {
+      expect(typeof tool.annotations?.readOnlyHint).toBe("boolean");
+      expect(typeof tool.annotations?.destructiveHint).toBe("boolean");
+      expect(typeof tool.annotations?.openWorldHint).toBe("boolean");
+      expect(tool._meta?.securitySchemes).toBeArray();
+    }
+
+    expect(tools.find((tool) => tool.name === "awthor_update_chapter")?._meta).toMatchObject({
+      securitySchemes: [{ scopes: ["awthor.write"], type: "oauth2" }],
+    });
+    expect(tools.find((tool) => tool.name === "awthor_publish_book")?._meta).toMatchObject({
+      securitySchemes: [{ scopes: ["awthor.write", "awthor.publish"], type: "oauth2" }],
+    });
+    await server.close();
+  });
+
+  test("implements standard search and fetch results for books and story chapters", async () => {
+    const service = createService();
+    const { client, server } = await connect(service, ["awthor.read"]);
+    const search = await client.callTool({
+      arguments: { query: "Private words" },
+      name: "search",
+    });
+    const searchContent = search.content as Array<{ text: string; type: "text" }>;
+    const payload = JSON.parse(searchContent[0].text) as {
+      results: Array<{ id: string; title: string; url: string }>;
+    };
+
+    expect(searchContent).toHaveLength(1);
+    expect(payload.results).toHaveLength(1);
+    expect(payload.results[0]).toMatchObject({
+      id: "story:book-1:chapter-1",
+      title: "The Quiet Archive — Opening",
+      url: "http://localhost:3000/books/book-1?chapter=chapter-1",
+    });
+
+    const fetch = await client.callTool({
+      arguments: { id: payload.results[0].id },
+      name: "fetch",
+    });
+    const fetchContent = fetch.content as Array<{ text: string; type: "text" }>;
+    const document = JSON.parse(fetchContent[0].text) as { text: string };
+    expect(fetchContent).toHaveLength(1);
+    expect(document.text).toContain("Private words here.");
     await server.close();
   });
 

@@ -143,6 +143,7 @@ to the [development guide](docs/development.md).
 | Learn the writing workflow, tools, shortcuts, and themes | [Product guide](docs/product-guide.md) |
 | Understand what stays local and when data can leave the browser | [Data, privacy, and sync](docs/data-privacy-sync.md) |
 | Connect Awthor to browser-local or remote AI tools | [AI integrations](docs/ai-integrations.md) |
+| Configure and validate the OAuth-protected MCP server | [Remote MCP](docs/remote-mcp.md) |
 | Set up, test, understand, or deploy the codebase | [Development guide](docs/development.md) |
 | Explore the planned bring-your-own-key AI insights feature | [AI insights BYOK PRD](docs/AI_INSIGHTS_BYOK_PRD.md) |
 | Get help or report a problem safely | [Support](SUPPORT.md) · [Security](SECURITY.md) |

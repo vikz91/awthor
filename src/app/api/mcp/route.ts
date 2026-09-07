@@ -8,7 +8,7 @@ import {
   isMcpAuthenticationFailure,
   type McpPrincipal,
 } from "@/lib/mcp/auth";
-import { mcpConfiguration } from "@/lib/mcp/config";
+import { getMcpRequestUrls } from "@/lib/mcp/config";
 import { createMcpAuthenticationError, validateMcpRequestOrigin } from "@/lib/mcp/http";
 import { createRemoteMcpServer } from "@/lib/mcp/tool-registry";
 
@@ -27,6 +27,7 @@ function unavailableResponse() {
 }
 
 async function handleMcpRequest(request: Request, principal: McpPrincipal): Promise<Response> {
+  const { resourceUrl } = getMcpRequestUrls(request);
   const database = await getAwthorDatabase();
   const service = createRemoteWorkspaceService(database, principal.userId);
   const server = createRemoteMcpServer({ scopes: principal.scopes, service });
@@ -41,7 +42,7 @@ async function handleMcpRequest(request: Request, principal: McpPrincipal): Prom
       clientId: principal.clientId,
       expiresAt: principal.expiresAt,
       extra: { userId: principal.userId },
-      resource: mcpConfiguration.resourceUrl ? new URL(mcpConfiguration.resourceUrl) : undefined,
+      resource: resourceUrl ? new URL(resourceUrl) : undefined,
       scopes: principal.scopes,
       token: principal.token,
     },
@@ -49,20 +50,24 @@ async function handleMcpRequest(request: Request, principal: McpPrincipal): Prom
 }
 
 async function requestHandler(request: Request): Promise<Response> {
+  const { metadataUrl } = getMcpRequestUrls(request);
   const originResponse = validateMcpRequestOrigin(request);
   if (originResponse) return originResponse;
 
   const clerkAuthentication = await auth({ acceptsToken: "oauth_token" });
   const authentication = authenticateMcpBearerRequest(request, clerkAuthentication);
   if (isMcpAuthenticationFailure(authentication)) {
-    return createMcpAuthenticationError(authentication);
+    return createMcpAuthenticationError(authentication, metadataUrl);
   }
   if (!(await isSyncAccountAuthorized(authentication.userId))) {
-    return createMcpAuthenticationError({
-      error: "insufficient_scope",
-      message: syncAccessDeniedMessage,
-      status: 403,
-    });
+    return createMcpAuthenticationError(
+      {
+        error: "insufficient_scope",
+        message: syncAccessDeniedMessage,
+        status: 403,
+      },
+      metadataUrl,
+    );
   }
 
   try {

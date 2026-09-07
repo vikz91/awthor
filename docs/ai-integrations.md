@@ -5,7 +5,7 @@ Awthor has two deliberately separate AI integration boundaries:
 | | WebMCP Site Tools | Remote MCP |
 | --- | --- | --- |
 | Data source | The open browser profile's local Awthor repository | The signed-in writer's already-synced cloud workspace |
-| Where it runs | Inside an open Awthor page in a compatible AI browser | At the deployed `/api/mcp` endpoint |
+| Where it runs | Inside an open Awthor page in a compatible AI browser | At the deployed `/mcp` endpoint |
 | Account or cloud setup | None | Clerk OAuth, cloud-feature access, and MongoDB sync |
 | Availability | Only while the Awthor page remains open | Page-independent from any compatible MCP client |
 | Scope | Narrow book, chapter, backup, navigation, and scroll tools | Broader authoring, workspace, character, chapter-arc, backup, and publishing tools |
@@ -13,6 +13,8 @@ Awthor has two deliberately separate AI integration boundaries:
 Use Site Tools when the AI should work with data stored on the current device. Use remote MCP for
 page-independent workflows against data the writer has explicitly synced. For cloud behavior,
 privacy boundaries, and remote setup, see [Data, privacy, sync, and remote MCP](data-privacy-sync.md).
+For the complete remote tool inventory, local Inspector workflow, ChatGPT connection steps, and
+production checks, see [Awthor Remote MCP](remote-mcp.md).
 
 ## Use local WebMCP Site Tools
 

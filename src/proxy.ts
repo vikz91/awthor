@@ -10,4 +10,6 @@ const clerkProxy = clerkMiddleware(async (auth, request) => {
 
 export default clerkConfiguration.enabled ? clerkProxy : () => NextResponse.next();
 
-export const config = { matcher: ["/api/sync/:path*", "/api/mcp/:path*", "/api/publish/:path*"] };
+export const config = {
+  matcher: ["/api/sync/:path*", "/api/mcp/:path*", "/mcp/:path*", "/api/publish/:path*"],
+};
