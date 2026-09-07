@@ -8,7 +8,8 @@ published separately as an unlisted, read-only snapshot.
 ## Highlights
 
 - **One calm workspace:** Read and write the same Markdown chapter without changing routes. Choose
-  a seamless or paginated document layout, or enter Focus mode for a distraction-free view.
+  seamless reading, a paginated Read-mode preview, or notebook-style drafting, and enter Focus
+  mode for a distraction-free view.
 - **Local writing tools:** Use on-device Harper proofreading, character dossiers, chapter arcs,
   selection formatting, live counts, and keyboard-first controls.
 - **Portable work:** Export a complete book as PDF, EPUB 3, or combined Markdown. Full local
@@ -24,17 +25,30 @@ published separately as an unlisted, read-only snapshot.
 
 ## Screens and routes
 
-Awthor's private app has four main screens:
+### Public marketing
 
 | Route | Screen |
 | --- | --- |
 | `/` | Minimal landing page with product, privacy, and open-source information |
+| `/open-source-novel-writing-app` | Open-source overview covering Awthor's license, local ownership, and contribution model |
+| `/private-local-first-writing-app` | Privacy overview explaining local defaults and the boundaries around optional cloud features |
+| `/scrivener-alternative` | Comparison page for writers evaluating Awthor alongside Scrivener |
+
+### App
+
+| Route | Screen |
+| --- | --- |
 | `/books` | Searchable, cover-first local library with book and author settings dialogs |
 | `/books/[bookId]` | Unified Markdown reader and writer with chapter navigation and in-place writing tools |
 | `/test` | **System** diagnostics for seeding, clearing, importing, and exporting local data |
 
-`/stories/[publicId]` sits outside the private app. It is the read-only, unlisted public snapshot
-created only when a signed-in writer publishes a synced book.
+### Published stories
+
+| Route | Screen |
+| --- | --- |
+| `/stories/[publicId]` | Read-only, unlisted public snapshot created when a signed-in writer publishes a synced book |
+
+### Legacy redirects
 
 Older URLs remain usable through temporary redirects:
 
@@ -62,9 +76,17 @@ the underlying document remains continuous. Reduced-motion preferences are respe
 
 ### Document layout
 
-The layout control switches between a seamless, Google Docs-style canvas and paginated pages.
-This preference stays on the current device. Changing layouts preserves the chapter, scroll
-position, and editor caret.
+The layout control switches Read mode between a seamless, Google Docs-style canvas and paginated
+pages. Write mode remains a continuous editor regardless of that selection, so choosing Pages
+while writing saves the preference and previews it after returning to Read. Changing layouts
+preserves the chapter, scroll position, and editor caret.
+
+### Notebook mode
+
+Write mode can replace the classic continuous editor surface with a ruled notebook sheet and a
+handwriting-style font. Notebook mode changes presentation only: the chapter remains the same
+Markdown source and uses the normal autosave path. The setting is saved independently for each
+book and restored when that book is opened again.
 
 ### Selection formatting
 
@@ -105,14 +127,16 @@ bottom zone. Focus mode is never persisted.
 
 ## Writing tools
 
-The floating toolbar provides four in-place tools:
+The floating toolbar provides five tools in Read mode. Write mode adds Notebook as a sixth tool:
 
-| Tool | What it does |
-| --- | --- |
-| **Spell check** | Runs local Harper.js spelling, grammar, and style feedback. Each book can choose an English dialect and maintain custom vocabulary for names and transliterated words. |
-| **Characters** | Opens a searchable character list and editable dossier. |
-| **Chapter arc** | Records the current chapter's stage, tension, goal, conflict, and outcome. |
-| **Counts** | Toggles a live word and character count for the current chapter. |
+| Tool | Availability | What it does |
+| --- | --- | --- |
+| **Spell check** | Read and Write | Runs local Harper.js spelling, grammar, and style feedback. Each book can choose an English dialect and maintain custom vocabulary for names and transliterated words. |
+| **Characters** | Read and Write | Opens a searchable character list and editable dossier. |
+| **Chapter arc** | Read and Write | Records the current chapter's stage, tension, goal, conflict, and outcome. |
+| **Counts** | Read and Write | Toggles a live word and character count for the current chapter. |
+| **Layout** | Read and Write | Chooses seamless or paginated Read-mode rendering. Pages can be selected while writing, but Write mode stays continuous. |
+| **Notebook** | Write only | Toggles the ruled, handwriting-style editor and remembers the choice for the current book. |
 
 On desktop, the toolbar reveals near the bottom edge, remains available while focused or while a
 tool is open, and then automatically collapses to a visible **Tools** cue. Move near the bottom
@@ -130,6 +154,8 @@ Every shortcut also has a visible control.
 | `Alt/Option + T` | Reveal and focus the writing tools |
 | Hold `Alt/Option` | Show numbered toolbar shortcuts |
 | `Alt/Option + 1–4` | Activate Spell check, Characters, Chapter arc, or Counts |
+| `Alt/Option + 5` | Switch between seamless and paginated Read-mode layout |
+| `Alt/Option + 6` | Toggle Notebook mode while writing |
 | `Ctrl/Cmd + B` | Bold the current text selection |
 | `Ctrl/Cmd + I` | Italicize the current text selection |
 | `Ctrl/Cmd + S` | Save the current manuscript immediately |

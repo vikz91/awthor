@@ -56,8 +56,29 @@ with you whenever you want.
 
 |  |  |
 | --- | --- |
-| **01 · WRITE**<br><br>Markdown editing with local autosave<br>Seamless and paginated layouts<br>Read, Write, and distraction-free Focus modes | **02 · SHAPE**<br><br>On-device spelling, grammar, and style feedback<br>Character dossiers and chapter-arc planning<br>Live word counts and keyboard-first controls |
+| **01 · WRITE**<br><br>Markdown editing with local autosave<br>Seamless reading, paginated previews, and notebook drafting<br>Read, Write, and distraction-free Focus modes | **02 · SHAPE**<br><br>On-device spelling, grammar, and style feedback<br>Character dossiers and chapter-arc planning<br>Live word counts and keyboard-first controls |
 | **03 · FINISH**<br><br>Browser-generated PDF, EPUB 3, and Markdown<br>Complete-book exports—not chapter fragments<br>Unlisted, read-only publishing when enabled | **04 · STAY IN CONTROL**<br><br>Portable full-workspace backups<br>Optional event-driven multi-device sync<br>Local WebMCP and OAuth-protected remote MCP |
+
+## Main features
+
+- **Local-first book library:** Create, search, organize, and delete books without an account. The
+  default workspace stays in this browser's IndexedDB.
+- **One Read/Write workspace:** Move between rendered GitHub Flavored Markdown and the editable
+  source without changing chapters or routes.
+- **Three ways to meet the page:** Read seamlessly or as paginated pages; draft on the classic
+  canvas or a per-book ruled Notebook; use Focus mode when only the manuscript should remain.
+- **On-device proofreading:** Harper checks spelling, grammar, and style in a browser worker, with
+  an English dialect and custom vocabulary saved for each book.
+- **Story planning beside the prose:** Maintain character dossiers and chapter arcs without turning
+  the writing view into a project-management dashboard.
+- **Complete-book output:** Copy combined Markdown or download browser-generated PDF and EPUB 3
+  files without uploading the manuscript for conversion.
+- **Portable backups:** Export and restore the local workspace as a `.awthor.zip` archive, with
+  backward-compatible import for supported JSON backups.
+- **Optional connected features:** Explicitly opt into private multi-device sync, unlisted
+  publishing, page-local WebMCP, or OAuth-protected remote MCP when those capabilities are useful.
+- **Keyboard- and theme-aware interface:** Use visible shortcuts, accessible controls, and the
+  semantic Paper or Stone theme across mobile and desktop layouts.
 
 ## Your manuscript has a simple path
 
@@ -75,6 +96,26 @@ The local path needs no account, API key, or database. Creating an account still
 workspace; the first **Sync** is the explicit consent boundary. Read the
 [data, privacy, and sync guide](docs/data-privacy-sync.md) for the full model and its remote-image
 caveats.
+
+## Why Awthor stands apart
+
+Awthor is not trying to win by having the largest feature catalog. It is the strongest fit for a
+writer whose non-negotiables are **no purchase, auditable source, no required account, a
+device-local default, and portable manuscript formats**. Competitor details below link to each
+vendor's own product pages.
+
+| Tool | Strongest fit | Product and data model | Where Awthor differs |
+| --- | --- | --- | --- |
+| **Awthor** | Private, focused novel drafting with portable formats | Free AGPL software; browser-local by default; cloud features are optional | Combines account-free local writing, on-device proofreading, open Markdown, portable backups, and self-hosting |
+| [Scrivener](https://www.literatureandlatte.com/scrivener/overview) | Deep research, outlining, snapshots, and mature compile options | Proprietary desktop licences; local projects with optional Dropbox or device transfer for cross-platform work | Awthor removes the purchase and platform-licence boundary and keeps the complete implementation open |
+| [Atticus](https://www.atticus.io/) | Polished print and ebook formatting for publication | Proprietary one-time purchase; automatic cloud saving with an offline-capable desktop app | Awthor prioritizes free local-first drafting and open Markdown; Atticus prioritizes production-ready typesetting |
+| [Reedsy Studio](https://reedsy.com/studio/write-a-book/) | Free online writing with automatic PDF and EPUB typesetting | Free core with paid add-ons; an account and online browser access are required | Awthor requires no account for local writing and keeps the default manuscript outside a hosted service |
+| [LivingWriter](https://livingwriter.com/pricing) | Cloud collaboration, templates, goals, and integrated AI features | Cloud-hosted service with a limited free tier and paid plans | Awthor has no mandatory cloud or subscription layer and does not put prose generation in the ordinary writing loop |
+
+That makes Awthor a particularly good choice for privacy-conscious writers, open-source users,
+Markdown authors, self-hosters, and anyone who wants the cloud to remain a choice. Writers who need
+advanced print typesetting, real-time collaboration, or a large research database may prefer one
+of the specialized alternatives above.
 
 ## Inside the workspace
 
@@ -153,7 +194,7 @@ to the [development guide](docs/development.md).
 Awthor uses Next.js 16, React 19, TypeScript, Tailwind CSS, IndexedDB, and Bun. Product data stays
 behind a repository boundary, exports are assembled in the browser, and the Paper and Stone themes
 share accessible semantic tokens. The [architecture overview](docs/development.md#architecture)
-maps the complete codebase.
+maps the codebase's routes, data boundaries, integrations, and major components.
 
 ## Contributing
 

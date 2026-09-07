@@ -61,15 +61,28 @@ Do not open a public issue for a vulnerability. Follow [SECURITY.md](SECURITY.md
 ## Publishing a release
 
 Stable releases are automated from semantic-version tags. Update `package.json` to the intended
-version, commit and push the verified change to `main`, then tag that commit with the exact matching
-version and push the annotated tag:
+stable semantic version, commit the verified change, and push it to `main`. From that clean,
+up-to-date `main` branch, run the canonical release command:
+
+```bash
+bun run release
+```
+
+The release wrapper refuses to create a tag unless the working tree is clean, the current branch is
+`main`, local `HEAD` exactly matches `origin/main`, `package.json` contains a stable semantic
+version, and its `v<version>` tag does not already exist. It then creates and pushes the annotated
+tag.
+
+If the wrapper is unavailable, the manual fallback is to verify those same conditions before
+creating and pushing the exact package-version tag:
 
 ```bash
 git tag -a v0.1.1 -m "Awthor v0.1.1"
 git push origin v0.1.1
 ```
 
-The release workflow checks the tag format and package version, installs frozen dependencies, runs
-lint, tests, the production build, and `git diff --check`, then publishes a GitHub Release with
-generated notes and the live Awthor URL. Ordinary pushes and merges to `main` continue to run CI
-and deploy through Vercel, but do not create a release or invent a version number.
+The release workflow independently checks the tag format, package version, and presence of the
+tagged commit on `main`; installs frozen dependencies; runs lint, tests, the production build, and
+`git diff --check`; then publishes a GitHub Release with generated notes and the live Awthor URL.
+Ordinary pushes and merges to `main` continue to run CI and deploy through Vercel, but do not create
+a release or invent a version number.

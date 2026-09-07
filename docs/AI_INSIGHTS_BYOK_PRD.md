@@ -1,11 +1,11 @@
 # Awthor AI Insights (BYOK)
 
-Product requirements and implementation plan for adding opt-in, bring-your-own-key AI analysis to Awthor without adding an Awthor server or allowing AI to write the author's story.
+Product requirements and implementation plan for adding opt-in, bring-your-own-key AI analysis to Awthor without routing AI requests through Awthor or allowing AI to write the author's story.
 
 Status: Proposed  
 Target: Post-v1 feature  
 Owner: Awthor contributors  
-Last updated: 2026-08-28
+Last updated: 2026-09-07
 
 ---
 
@@ -26,7 +26,8 @@ Before implementation:
 
 Implementation rules:
 
-- [ ] Keep Awthor serverless. The Awthor deployment must not proxy, log, or store AI requests.
+- [ ] Keep AI provider traffic browser-to-provider. Awthor's optional hosted services must not
+  proxy, log, or store AI requests or AI-derived data.
 - [ ] Keep product data behind `AwthorRepository`; UI code must not call IndexedDB or localStorage directly.
 - [ ] Keep API keys out of backups, logs, error messages, URLs, analytics, and rendered markup.
 - [ ] Use semantic Paper/Stone tokens rather than hard-coded colors.
@@ -42,18 +43,22 @@ Awthor AI Insights is an optional, BYOK analysis layer for authors who want stru
 
 Authors select a provider, model, and analysis scope. Awthor sends only the explicitly approved manuscript scope directly from the browser to that provider. The provider returns structured observations, evidence, questions, and suggestions. Derived chapter and book memory stays in IndexedDB on the author's device.
 
-Awthor does not:
+AI Insights does not:
 
 - Operate an AI proxy.
 - Receive the API key.
-- Store the manuscript on an Awthor server.
+- Send manuscript text, credentials, provider responses, or derived AI data to an Awthor-controlled
+  AI service. Optional cloud sync and publishing retain their separate, explicit data boundaries.
 - Analyse text silently or while the author types.
 - Continue, rewrite, or generate story prose.
 - Insert model output into the manuscript.
 
 Important privacy statement:
 
-> Awthor remains serverless, but AI analysis is not fully local. Text selected for analysis is sent directly from the browser to the author's chosen AI provider and is subject to that provider's retention and privacy terms.
+> AI Insights is browser-to-provider, but AI analysis is not fully local. Text selected for
+> analysis is sent directly from the browser to the author's chosen AI provider and is subject to
+> that provider's retention and privacy terms. Awthor's optional sync, publishing, and remote MCP
+> services remain separate and do not proxy AI requests.
 
 ---
 
@@ -66,7 +71,8 @@ These decisions are locked unless the product owner explicitly changes them.
 - [ ] Require an explicit **Run analysis** action for every provider request.
 - [ ] Show the provider, model, and text scope before transmission.
 - [ ] Default API-key persistence to the current browser session only.
-- [ ] Do not add an Awthor-owned server, proxy, relay, or telemetry endpoint.
+- [ ] Do not add an Awthor-owned AI proxy, relay, API-key vault, request store, or AI telemetry
+  endpoint.
 - [ ] Do not add continuation, rewriting, dialogue generation, scene generation, or automatic prose insertion.
 - [ ] Do not provide an “Apply AI rewrite” action.
 - [ ] Permit summaries, outlines, observations, questions, and abstract suggestions.
@@ -98,7 +104,8 @@ These decisions are locked unless the product owner explicitly changes them.
 - Automatically applying provider output.
 - Training or fine-tuning models on the manuscript.
 - Embeddings, vector databases, or semantic search in the first release.
-- An Awthor cloud account, subscription, usage meter, or billing system.
+- Requiring an Awthor cloud account for AI Insights, or adding an AI subscription, usage meter, or
+  billing system.
 - An Awthor API-key vault.
 - Background analysis, continuous analysis, or analysis on every save.
 - Claiming objective quality, reader sentiment, marketability, or publishing success.
@@ -316,13 +323,16 @@ Settings states:
 Recommended V1 behavior:
 
 - Add one **Insights** action to the existing floating book toolbar only when AI is enabled.
+- Treat the current toolbar baseline as five actions in Read mode and six actions in Write mode.
+  Insights is therefore the sixth Read-mode action and seventh Write-mode action on desktop.
 - Keep Spell check as the local Harper tool.
 - Do not place provider branding in the main toolbar.
 - Open AI Insights in the existing responsive workspace-inspector/drawer pattern.
 - Keep only one drawer or tool surface active at a time.
 - Restore editor focus and caret when the drawer closes.
 
-If five toolbar items are too dense at mobile widths, place Insights inside a compact “More” item rather than adding a static secondary toolbar.
+At constrained widths, place Insights inside a compact **More** item rather than adding a sixth or
+seventh static toolbar action or a secondary toolbar.
 
 ### AI Insights drawer
 
@@ -510,7 +520,8 @@ Finding states:
 ## Privacy and security requirements
 
 - [ ] `AI-PRIV-001` Manuscript text is sent only to the selected provider endpoint.
-- [ ] `AI-PRIV-002` Awthor sends no manuscript or credential data to an Awthor-controlled service.
+- [ ] `AI-PRIV-002` AI Insights sends no manuscript, credential, provider response, or derived AI
+  data to an Awthor-controlled service.
 - [ ] `AI-PRIV-003` API keys never appear in query strings or browser history.
 - [ ] `AI-PRIV-004` API keys never appear in application logs, provider error messages shown to users, React state snapshots, or exported files.
 - [ ] `AI-PRIV-005` The UI names the provider receiving the text.
@@ -560,7 +571,8 @@ Non-portable AI memory/findings repository
 Insights drawer
 ```
 
-There is no Awthor server in this flow.
+There is no Awthor server in this AI-request flow. Optional sync, publishing, and remote MCP remain
+separate flows and must not receive AI credentials, requests, responses, or derived AI data.
 
 ### Module boundaries
 
@@ -1394,7 +1406,7 @@ Exit criteria:
 - [ ] Edit manuscript and observe Stale state.
 - [ ] Clear current-book memory.
 - [ ] Clear all AI data.
-- [ ] Confirm `/test` backup excludes AI data.
+- [ ] Confirm the `/test` `.awthor.zip` backup excludes AI data.
 - [ ] Verify Paper and Stone.
 - [ ] Verify keyboard-only operation.
 - [ ] Verify mobile/touch layout.
@@ -1409,8 +1421,9 @@ Exit criteria:
 - [ ] Harper proofreading remains fully local and functional.
 - [ ] Characters and Chapter arc remain functional.
 - [ ] Floating toolbar reveal and shortcuts remain functional.
-- [ ] PDF and Markdown export remain functional.
-- [ ] JSON backup/import remains functional and portable.
+- [ ] PDF, EPUB, and combined Markdown export remain functional.
+- [ ] `.awthor.zip` backup export and import remain functional and portable.
+- [ ] Legacy v1 and v2 JSON backup import remains backward compatible.
 
 ---
 
@@ -1469,7 +1482,6 @@ Only these product choices should block implementation after the technical spike
 
 - [ ] Approve the first verified provider(s).
 - [ ] Approve whether a custom OpenAI-compatible endpoint ships in V1.
-- [ ] Approve whether Insights is a fifth toolbar item or nested under More on small screens.
 - [ ] Approve whether minimal AI language corrections may show replacement text for a single sentence.
 - [ ] Approve whether a separate explicit AI findings export is desirable in a later release.
 - [ ] Approve whether passphrase-encrypted remembered keys are worth the additional complexity after V1.
@@ -1478,7 +1490,8 @@ Recommended defaults:
 
 - One verified provider plus the deterministic mock provider for V1.
 - No custom endpoint until endpoint warnings and redirect protections are complete.
-- Insights as a gated fifth item on desktop and under More on constrained mobile widths.
+- Insights as a gated sixth Read-mode and seventh Write-mode action on desktop, and under More at
+  constrained widths.
 - Minimal corrections allowed only in Language findings; no structural replacement prose.
 - No AI findings export in V1.
 - Session-only API keys in V1.

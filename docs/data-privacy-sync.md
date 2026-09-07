@@ -87,10 +87,11 @@ deletions; deletion records are created only by explicit local delete events.
 
 ## Private remote MCP
 
-The optional endpoint at `/api/mcp` operates only on the MongoDB workspace already synced to the
-authenticated Clerk user. It cannot read a browser's IndexedDB. Available tools cover books,
-chapters, characters, chapter arcs, author/workspace settings, portable export/import, and
-publishing controls.
+The optional canonical endpoint at `/mcp` operates only on the MongoDB workspace already synced to
+the authenticated Clerk user. `/api/mcp` remains available only as a compatibility alias for older
+connections. Remote MCP cannot read a browser's IndexedDB. Available tools cover books, chapters,
+characters, chapter arcs, author/workspace settings, portable export/import, and publishing
+controls.
 
 Remote MCP data crosses into the connected client. Reading a chapter sends private Markdown;
 character tools send dossier content; exporting sends an unencrypted full backup; and write/import
@@ -118,12 +119,13 @@ CLERK_OAUTH_AUTHORIZATION_SERVER_URL=https://your-clerk-oauth-issuer.example
 MCP_ALLOWED_ORIGINS=https://client.example
 ```
 
-Configure a Clerk OAuth application/resource for the deployed
-`https://awthor.example/api/mcp` endpoint and grant `awthor.read`, `awthor.write`, and
-`awthor.publish` as appropriate. `NEXT_PUBLIC_SITE_URL` supplies the canonical deployment origin;
-`CLERK_OAUTH_AUTHORIZATION_SERVER_URL` is the Clerk OAuth issuer. `MCP_ALLOWED_ORIGINS` is needed
-only for additional browser-based MCP clients. Native clients use the OAuth Bearer flow and do not
-need an origin entry.
+Configure a Clerk OAuth application/resource for the deployed `https://awthor.example/mcp`
+endpoint and grant `awthor.read`, `awthor.write`, and `awthor.publish` as appropriate. The canonical
+protected-resource metadata is published at
+`https://awthor.example/.well-known/oauth-protected-resource`. `NEXT_PUBLIC_SITE_URL` supplies the
+canonical deployment origin; `CLERK_OAUTH_AUTHORIZATION_SERVER_URL` is the Clerk OAuth issuer.
+`MCP_ALLOWED_ORIGINS` is needed only for additional browser-based MCP clients. Native clients use
+the OAuth Bearer flow and do not need an origin entry.
 
 Remote MCP remains disabled until Clerk, MongoDB, the public site URL, and the OAuth issuer are all
 configured. Local writing, account Sync, and page-local WebMCP continue to work independently.

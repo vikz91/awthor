@@ -6,11 +6,12 @@ default, and fully usable without an account.
 
 ## Hosted beta access
 
-- [ ] Make hosted cloud access invite-only at first.
+- [x] Keep hosted cloud access invite-only through the server-checked
+      `ADMIN_EMAILS` allowlist, which fails closed when empty.
 - [ ] Add a Clerk-backed `hostedAccess` entitlement for Sync and remote MCP.
 - [ ] Add a separate `publisher` entitlement; signing in or syncing must not
       automatically grant publishing rights.
-- [ ] Keep the local app, local exports, imports, and page-scoped WebMCP tools
+- [x] Keep the local app, local exports, imports, and page-scoped WebMCP tools
       available without either entitlement.
 
 ## Publishing and content policy
@@ -24,7 +25,7 @@ default, and fully usable without an account.
       opening access beyond invited users.
 - [ ] Add an administrator unpublish/disable control and retain a minimal
       publication audit trail.
-- [ ] Keep public stories unlisted and `noindex`; do not add profiles,
+- [x] Keep public stories unlisted and `noindex`; do not add profiles,
       discovery, comments, likes, or a public directory without a separate
       moderation plan.
 
@@ -61,15 +62,16 @@ default, and fully usable without an account.
       opt-in; never publish it merely because it exists in the author profile.
 - [ ] Limit remote cover and Markdown-image URL count and size. Plan a
       server-side image proxy/cache before public publishing scales.
-- [ ] Clearly disclose that externally hosted images can receive reader
+- [x] Clearly disclose that externally hosted images can receive reader
       requests until a proxy is available.
-- [ ] Preserve local export and local-data deletion options regardless of
+- [x] Preserve local export and local-data deletion options regardless of
       hosted-account or publishing status.
 
 ## Recommended delivery order
 
-1. Invite-only hosted access and a separate publisher entitlement.
-2. Server-side quotas, rate limits, and publication audit controls.
-3. Hosted-feature terms, content declaration, and report/takedown process.
-4. Admin moderation controls and usage monitoring.
-5. Public-media hardening and an image proxy/cache.
+1. Replace the current `ADMIN_EMAILS` allowlist with Clerk-backed hosted-access
+   and separate publisher entitlements before widening the beta.
+2. Add server-side quotas, rate limits, and publication audit controls.
+3. Add hosted-feature terms, content declaration, and a report/takedown process.
+4. Add administrator moderation controls and usage monitoring.
+5. Harden public media delivery with an image proxy/cache.

@@ -2,7 +2,8 @@
 
 This directory provides Awthor's client-side spell and grammar checking boundary. It currently uses
 [Harper.js](https://writewithharper.com/), but editor code must depend on `ProofreadingService`, not
-on Harper types or classes.
+on Harper types or classes. The book workspace ships this integration through the floating
+**Spell check** tool in both Read and Write modes.
 
 ## Instructions for AI coding agents
 
@@ -20,8 +21,9 @@ layer.
    component.
 7. Re-run proofreading after applying a suggestion, changing the dialect or rules, or updating the
    personal dictionary.
-8. Keep ignored-issue data opaque. Persist the string returned by `exportIgnoredIssues()` without
-   parsing or editing it.
+8. Keep ignored-issue data opaque. If a future integration persists the string returned by
+   `exportIgnoredIssues()`, store it without parsing or editing it. The shipped book integration
+   does not persist ignored issues.
 9. Use semantic design tokens when rendering issues or controls, and verify the UI in Paper and
    Stone themes.
 10. Never send manuscript text to a server as part of this integration. Harper runs locally in a
@@ -180,21 +182,19 @@ many single-word calls because dictionary imports are relatively expensive.
 
 ## Persisting local preferences
 
-Harper state lives in memory unless the app exports and restores it. Persist it through Awthor's
-client-side repository when the write-page integration is added.
+The shipped book integration durably stores only the book's selected dialect and custom vocabulary
+in `BookProofreadingSettings`. Those preferences use Awthor's client-side repository and are part of
+the optional workspace-sync record when the writer has enabled cloud sync. The drawer restores them
+when it configures the singleton for the active book.
 
-```ts
-const savedProofreadingState = {
-  words: await proofreading.exportWords(),
-  ignoredIssues: await proofreading.exportIgnoredIssues(),
-};
+Ignored findings and rule configuration remain in the in-memory singleton and do not survive a full
+page reload or a new browser session. Rule configuration is part of the engine-neutral service API,
+but the shipped drawer does not expose rule controls. Do not describe either state as durable unless
+a future repository schema explicitly adds it.
 
-await proofreading.addWords(savedProofreadingState.words);
-await proofreading.importIgnoredIssues(savedProofreadingState.ignoredIssues);
-```
-
-Available reset operations are `clearWords()` and `clearIgnoredIssues()`. Do not store manuscript
-text in this preference payload.
+The lower-level service supports `exportWords()`, `exportIgnoredIssues()`, `importIgnoredIssues()`,
+`clearWords()`, and `clearIgnoredIssues()` for future integrations. Treat exported ignored-issue
+data as opaque, and never store manuscript text in a preference payload.
 
 ## Dialects and rules
 
@@ -234,7 +234,7 @@ known changes; do not overwrite the complete configuration to toggle one setting
 
 ## Integration checklist
 
-Before considering a write-page integration complete, verify that:
+When changing the shipped book-workspace integration, verify that:
 
 - The editor remains interactive while Harper initializes.
 - Checks are debounced and stale responses cannot replace current results.
@@ -243,7 +243,9 @@ Before considering a write-page integration complete, verify that:
 - Suggestions cannot be applied after the manuscript changes.
 - Applying a suggestion preserves cursor and selection position where practical.
 - “Ignore” and “Add to dictionary” have distinct labels and behavior.
-- Personal words, ignored issues, dialect, and rule preferences remain local to the device.
+- The selected dialect and custom words persist per book through the repository and optional sync.
+- Ignored findings are session-only, and the interface does not promise that ignored findings or
+  rule changes survive a reload.
 - All controls are keyboard-accessible and work in both Paper and Stone themes.
 - Tests mock `ProofreadingService` rather than loading Harper's WASM worker for every UI test.
 

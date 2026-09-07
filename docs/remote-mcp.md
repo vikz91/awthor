@@ -84,12 +84,20 @@ https://your-temporary-host.example/mcp
 https://your-temporary-host.example/.well-known/oauth-protected-resource
 ```
 
-In ChatGPT desktop:
+In ChatGPT desktop, follow the current
+[OpenAI connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt):
 
-1. Enable developer mode under **Settings → Security and login**.
-2. Open **Settings → Plugins**, add a custom MCP server, and enter the public `/mcp` URL.
-3. Complete Awthor's Clerk sign-in and authorize the requested scopes.
-4. Start a new chat, select the Awthor plugin, and ask it to list books.
+1. Open **Settings → Security and login** and turn on **Developer mode**.
+2. Go to **ChatGPT Plugins** and select the plus button.
+3. Enter a user-facing name and description, then enter the public Awthor `/mcp` URL under
+   **Connection**.
+4. Create the connection, complete Awthor's Clerk sign-in and scope authorization, and review the
+   discovered tools and metadata.
+5. Start a new conversation, add the Awthor connection from the tools menu, and ask it to list
+   books.
+
+Developer mode and custom plugin connections may be unavailable when the account or workspace
+policy does not permit them.
 
 If tool definitions or OAuth metadata change, refresh or recreate the connection so ChatGPT does
 not use cached metadata. Never expose an unauthenticated tunnel: Awthor's MCP endpoint is designed
@@ -107,4 +115,3 @@ to reject requests without a valid Clerk bearer token.
 - An authenticated MCP Inspector session can initialize, list all 25 tools, and complete one safe
   read call.
 - The ChatGPT connection requests no broader scopes than the intended workflow requires.
-
