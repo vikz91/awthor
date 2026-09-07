@@ -19,7 +19,11 @@ import {
   repositoryMutatedEventName,
 } from "@/lib/repository";
 import { syncRepository } from "@/lib/sync/client";
-import { readSyncDeviceState, writeSyncDeviceState } from "@/lib/sync/device-state";
+import {
+  readSyncDeviceState,
+  withLatestSyncDeviceState,
+  writeSyncDeviceState,
+} from "@/lib/sync/device-state";
 import { queueSyncDeletions, type SyncDeletion } from "@/lib/sync/records";
 import {
   type AutomaticSyncPolicy,
@@ -237,22 +241,35 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          attempted = true;
-          if (!(await checkAccess())) {
-            throw new Error("This account is not authorized to use Awthor cloud features.");
-          }
-
           setStatus("syncing");
-          const state = stateRef.current ?? readSyncDeviceState(window.localStorage);
-          const next = await syncRepository({
-            onApplyingRemoteChange: (applying) => {
-              applyingRemoteChange.current = applying;
-            },
-            repository,
-            state: { ...state, lastAttemptAt: new Date().toISOString() },
+          const next = await withLatestSyncDeviceState(window.localStorage, async (state) => {
+            stateRef.current = state;
+            try {
+              attempted = true;
+              if (!(await checkAccess())) {
+                throw new Error("This account is not authorized to use Awthor cloud features.");
+              }
+              const synced = await syncRepository({
+                onApplyingRemoteChange: (applying) => {
+                  applyingRemoteChange.current = applying;
+                },
+                repository,
+                state: { ...state, lastAttemptAt: new Date().toISOString() },
+              });
+              stateRef.current = synced;
+              writeSyncDeviceState(window.localStorage, synced);
+              return synced;
+            } catch (error) {
+              const failed = {
+                ...state,
+                lastAttemptAt: new Date().toISOString(),
+                lastError: error instanceof Error ? error.message : "Sync could not be completed.",
+              };
+              stateRef.current = failed;
+              writeSyncDeviceState(window.localStorage, failed);
+              throw error;
+            }
           });
-          stateRef.current = next;
-          writeSyncDeviceState(window.localStorage, next);
           setLastSuccessfulSyncAt(next.lastSuccessfulSyncAt);
           if (localMutationRevision.current === revisionAtStart) {
             hasLocalChanges.current = false;
@@ -264,13 +281,6 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           failureCount.current += 1;
           backoffUntil.current = Date.now() + getSyncBackoffDelayMs(failureCount.current);
-          const next = {
-            ...(stateRef.current ?? readSyncDeviceState(window.localStorage)),
-            lastAttemptAt: new Date().toISOString(),
-            lastError: error instanceof Error ? error.message : "Sync could not be completed.",
-          };
-          stateRef.current = next;
-          writeSyncDeviceState(window.localStorage, next);
           setStatus("error");
           throw error;
         } finally {
@@ -338,11 +348,13 @@ function ConfiguredSyncProvider({ children }: { children: ReactNode }) {
       if (applyingRemoteChange.current) return;
       const deletions = (event as CustomEvent<readonly SyncDeletion[]>).detail;
       if (!Array.isArray(deletions) || deletions.length === 0) return;
-      const state = stateRef.current ?? readSyncDeviceState(window.localStorage);
-      void queueSyncDeletions(state, deletions, new Date().toISOString())
-        .then((next) => {
-          stateRef.current = next;
-          writeSyncDeviceState(window.localStorage, next);
+      void withLatestSyncDeviceState(window.localStorage, async (state) => {
+        const next = await queueSyncDeletions(state, deletions, new Date().toISOString());
+        stateRef.current = next;
+        writeSyncDeviceState(window.localStorage, next);
+        return next;
+      })
+        .then(() => {
           markLocalChange("immediate");
         })
         .catch(() => {
