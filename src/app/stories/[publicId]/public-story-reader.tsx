@@ -11,6 +11,8 @@ import type { PublishedSeriesStory, PublishedStory } from "@/lib/database/publis
 import { countManuscript, withoutLeadingMarkdownTitle } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
 
+import { renderedNarrationText, StoryNarrationControls } from "./story-narration-controls";
+
 type PublicStoryReaderProps = {
   seriesStories: readonly PublishedSeriesStory[];
   story: PublishedStory;
@@ -188,6 +190,21 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
               </a>
             ) : null}
           </header>
+
+          <StoryNarrationControls
+            key={`${story.publicId}:${story.updatedAt}`}
+            getText={() =>
+              story.chapters
+                .map((chapter) => {
+                  const section = chapterRefs.current[chapter.id];
+                  if (!section) return "";
+                  return renderedNarrationText(
+                    section.querySelector("[data-pagination-source]") ?? section,
+                  );
+                })
+                .join("\n")
+            }
+          />
 
           <div className="divide-y divide-border">
             {story.chapters.map((chapter) => {
