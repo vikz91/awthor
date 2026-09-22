@@ -1,4 +1,5 @@
 import { estimatedSeconds, type GenerationStatus } from "./chunks";
+import { AUDIO_CONCURRENCY } from "./config";
 import type { LanguageChoice } from "./models";
 
 export type GenerationProgress = {
@@ -123,7 +124,7 @@ export async function generatePublishedAudio(
     }
   };
   const results = await Promise.allSettled(
-    Array.from({ length: 2 }, async () => {
+    Array.from({ length: AUDIO_CONCURRENCY }, async () => {
       try {
         await run();
       } catch (error) {

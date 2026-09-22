@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { type GenerationProgress, generatePublishedAudio } from "./generate";
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-test("coordinates two requests, skips saved chunks, and keeps progress monotonic with out-of-order replies", async () => {
+test("coordinates four requests, skips saved chunks, and keeps progress monotonic with out-of-order replies", async () => {
   const original = globalThis.fetch;
   const waiting = new Map<number, (response: Response) => void>();
   const requested: number[] = [];
@@ -19,11 +19,11 @@ test("coordinates two requests, skips saved chunks, and keeps progress monotonic
       return Response.json({
         id: "job",
         choice: "auto",
-        totalChunks: 4,
+        totalChunks: 6,
         totalChapters: 2,
         completedChunks: 1,
         completedChapters: 0,
-        chunks: [0, 1, 2, 3].map((id) => ({
+        chunks: [0, 1, 2, 3, 4, 5].map((id) => ({
           id,
           chapterId: id < 2 ? "a" : "b",
           state: id === 0 ? "ready" : "pending",
@@ -45,18 +45,22 @@ test("coordinates two requests, skips saved chunks, and keeps progress monotonic
       updates.push(value),
     );
     await tick();
-    expect(requested).toEqual([1, 2]);
+    expect(requested).toEqual([1, 2, 3, 4]);
     waiting.get(2)?.(Response.json({ ready: true }));
     await tick();
-    expect(requested).toEqual([1, 2, 3]);
+    expect(requested).toEqual([1, 2, 3, 4, 5]);
     waiting.get(3)?.(Response.json({ ready: true }));
     await tick();
     expect(finalized).toBe(false);
+    waiting.get(4)?.(Response.json({ ready: true }));
+    await tick();
+    waiting.get(5)?.(Response.json({ ready: true }));
+    await tick();
     waiting.get(1)?.(Response.json({ ready: true }));
     await task;
-    expect(peak).toBe(2);
+    expect(peak).toBe(4);
     expect(finalized).toBe(true);
-    expect(updates.map((u) => u.completedChunks)).toEqual([1, 2, 3, 4, 4]);
+    expect(updates.map((u) => u.completedChunks)).toEqual([1, 2, 3, 4, 5, 6, 6]);
     expect(updates.at(-1)?.completedChapters).toBe(2);
     expect(updates[0].etaSeconds).toBeUndefined();
   } finally {

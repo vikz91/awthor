@@ -6,6 +6,7 @@ import {
   currentGeneration,
   removeAudioBlob,
 } from "@/lib/database/story-audio";
+import { AUDIO_CONCURRENCY } from "@/lib/tts/config";
 import { AudioCapacityError, synthesizeChunk } from "@/lib/tts/native";
 
 export const runtime = "nodejs";
@@ -56,13 +57,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ boo
           {
             $size: {
               $filter: {
-                input: "$audioGeneration.chunks",
+                input: { $ifNull: ["$audioGeneration.chunks", []] },
                 as: "chunk",
                 cond: { $gt: ["$$chunk.leaseUntil", now] },
               },
             },
           },
-          2,
+          AUDIO_CONCURRENCY,
         ],
       },
     },

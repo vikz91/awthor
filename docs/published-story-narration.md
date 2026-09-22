@@ -11,7 +11,7 @@ targeting a maximum of 120 words or 1,800 characters. A chunk contains smaller M
 inference passages; sentences stay intact except for the existing 220-character
 inference limit. Chapters never share a chunk. Long chapters have multiple chunks.
 
-The browser coordinates two requests at once. MongoDB also enforces at most two
+The browser coordinates four requests at once. MongoDB also enforces at most four
 active chunk leases per story, including across tabs. A lease is tied to the job,
 published version, chunk index and unique attempt ID. A timed-out invocation can be
 retried after its six-minute lease expires. Completed chunks are not regenerated.
@@ -52,8 +52,8 @@ chunk index, never client-supplied text or storage URLs.
 The chunk route uses `runtime = "nodejs"` and `maxDuration = 300`. Enable Fluid
 Compute for that duration on Vercel. Externalized Transformers.js/onnxruntime-node
 load native CPU bindings; no Edge runtime or GPU is used. Model weights download
-from pinned Hugging Face revisions into two per-process temporary cache directories.
-Each slot removes its previous voice when switching languages. Only two model
+from pinned Hugging Face revisions into four per-process temporary cache directories.
+Each slot removes its previous voice when switching languages. Up to four model
 sessions are retained per instance, using one inference thread each. Separate
 requests can run concurrently even if Vercel routes them to the same instance.
 
@@ -101,7 +101,7 @@ repair. Open-source distribution does not remove the noncommercial restriction.
 ## Validation
 
 `bun test src/lib/tts src/lib/database/published-stories.test.ts` covers chunk bounds,
-ordering, chapter completion, ETA, two-request scheduling, resume, WAV output,
+ordering, chapter completion, ETA, four-request scheduling, resume, WAV output,
 preloading, chapter jumps and playback races. Run lint and a production build too.
 
 `bun scripts/verify-server-audio.ts` is an explicit integration check requiring MongoDB

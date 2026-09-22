@@ -5,9 +5,14 @@ const nextConfig: NextConfig = {
   // still required by the Docker image for its minimal production server.
   output: process.env.VERCEL === "1" ? undefined : "standalone",
   reactCompiler: true,
+  experimental: {
+    turbopackFileSystemCacheForDev: false,
+  },
   serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node"],
   outputFileTracingIncludes: {
     "/api/publish/*/audio/chunk": [
+      "./node_modules/onnxruntime-node/dist/**/*",
+      "./node_modules/onnxruntime-node/package.json",
       `./node_modules/onnxruntime-node/bin/napi-v*/${process.platform}/${process.arch}/*`,
     ],
   },

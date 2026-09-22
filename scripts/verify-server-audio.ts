@@ -37,7 +37,7 @@ const story = buildPublishedStory({
       id: "first",
       number: 1,
       title: "First",
-      body: "This is a short sentence. ".repeat(25),
+      body: "This is a short sentence. ".repeat(80),
     },
     { ...sourceChapter, id: "second", number: 2, title: "Second", body: "Here is the ending." },
   ],
@@ -58,11 +58,18 @@ const report = (value: unknown) => {
 const urls = new Set<string>();
 const inflight: Promise<Response>[] = [];
 try {
+  // Query planning may evaluate $expr on stories without an audio job.
+  await collection.insertMany([
+    { bookId: "no-audio-job", userId: owner },
+    { bookId: "null-audio-job", userId: owner, audioGeneration: null },
+  ]);
+  await collection.createIndex({ userId: 1 });
+  await collection.createIndex({ bookId: 1 });
   await collection.insertOne(story);
   const response = await route.POST(request({ choice: "en" }), context);
   check(response.ok, "Job creation failed");
   const job = await response.json();
-  check(job.totalChunks >= 3 && job.totalChapters === 2, "Expected a multi-chunk chapter");
+  check(job.totalChunks >= 5 && job.totalChapters === 2, "Expected a multi-chunk chapter");
   owner = "another-owner";
   check(
     (await chunkRoute.POST(request({ id: job.id, index: 0 }), context)).status === 409,
@@ -70,15 +77,16 @@ try {
   );
   owner = story.userId;
   const started = performance.now();
-  const first = chunkRoute.POST(request({ id: job.id, index: 0 }), context);
-  const second = chunkRoute.POST(request({ id: job.id, index: 1 }), context);
-  inflight.push(first, second);
-  // Wait for the two atomic leases before trying a duplicate and third concurrent request.
+  const batch = Array.from({ length: 4 }, (_, index) =>
+    chunkRoute.POST(request({ id: job.id, index }), context),
+  );
+  inflight.push(...batch);
+  // Wait for the four atomic leases before trying a duplicate and fifth concurrent request.
   for (let attempts = 0; attempts < 50; attempts++) {
     const doc = await collection.findOne({ bookId: book.id });
     if (
       doc?.audioGeneration.chunks.filter((c: { state: string }) => c.state === "running").length ===
-      2
+      4
     )
       break;
     await new Promise((r) => setTimeout(r, 100));
@@ -88,26 +96,26 @@ try {
     "Duplicate chunk was not locked",
   );
   check(
-    (await chunkRoute.POST(request({ id: job.id, index: 2 }), context)).status === 429,
-    "More than two concurrent chunks allowed",
+    (await chunkRoute.POST(request({ id: job.id, index: 4 }), context)).status === 429,
+    "More than four concurrent chunks allowed",
   );
-  const results = await Promise.all([first, second]);
+  const results = await Promise.all(batch);
   for (const result of results) check(result.ok, `Chunk request failed: ${await result.text()}`);
   report(
     JSON.stringify({
-      twoConcurrentChunksSeconds: Math.round((performance.now() - started) / 1000),
+      fourConcurrentChunksSeconds: Math.round((performance.now() - started) / 1000),
     }),
   );
   const resumed = await (await route.POST(request({ choice: "en" }), context)).json();
   check(
-    resumed.id === job.id && resumed.completedChunks === 2,
+    resumed.id === job.id && resumed.completedChunks === 4,
     "Resume did not preserve finished chunks",
   );
   check(
     (await route.PATCH(request({ id: job.id }), context)).status === 409,
     "Incomplete audio was published",
   );
-  for (let index = 2; index < job.totalChunks; index++)
+  for (let index = 4; index < job.totalChunks; index++)
     check(
       (await chunkRoute.POST(request({ id: job.id, index }), context)).ok,
       "Later chunk failed",
@@ -136,7 +144,7 @@ try {
       chapters: 2,
       checks: [
         "ownership",
-        "two-request limit",
+        "four-request limit",
         "duplicate lease",
         "resume",
         "incomplete rejection",

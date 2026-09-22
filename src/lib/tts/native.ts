@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env, LogLevel, pipeline, type TextToAudioPipeline } from "@huggingface/transformers";
-import { env as onnxEnv } from "onnxruntime-node";
+import { AUDIO_CONCURRENCY } from "./config";
 import { repairKannadaModel } from "./kannada-model";
 import { type Passage, type TtsLanguage, ttsModels } from "./models";
 import { NarrationWav } from "./wav";
@@ -11,7 +11,6 @@ import { NarrationWav } from "./wav";
 env.allowLocalModels = false;
 // Library execution errors can otherwise include manuscript token IDs in logs.
 env.logLevel = LogLevel.NONE;
-onnxEnv.logLevel = "fatal";
 const originalFetch = env.fetch;
 const repairedName = "model_awthor_padding_v1_quantized.onnx";
 env.fetch = async (input, init) => {
@@ -30,11 +29,9 @@ env.fetch = async (input, init) => {
 // Native ONNX needs file paths. Keep only each slot’s active voice on ephemeral disk.
 env.useFSCache = true;
 
-// Two independent sessions allow concurrent invocations in a Fluid Compute instance.
-const slots: { busy: boolean; synthesizer?: TextToAudioPipeline; language?: TtsLanguage }[] = [
-  { busy: false },
-  { busy: false },
-];
+// Independent sessions allow concurrent invocations in a Fluid Compute instance.
+const slots: { busy: boolean; synthesizer?: TextToAudioPipeline; language?: TtsLanguage }[] =
+  Array.from({ length: AUDIO_CONCURRENCY }, () => ({ busy: false }));
 
 export class AudioCapacityError extends Error {}
 
