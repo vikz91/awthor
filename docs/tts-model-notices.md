@@ -37,5 +37,5 @@ All learned tensor data remains byte-identical. The graph file remains 37,744,17
 
 Validation included ONNX graph checking and CPU inference with sequence lengths
 9, 20, 39, 51, and 101; all produced finite audio after repair and failed before it.
-The browser fetch adapter performs the repair once before caching. If upstream
+The server fetch adapter performs the repair once before caching. If upstream
 bytes differ, it refuses the asset rather than applying offsets to an unknown graph.

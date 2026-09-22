@@ -11,7 +11,7 @@ import type { PublishedSeriesStory, PublishedStory } from "@/lib/database/publis
 import { countManuscript, withoutLeadingMarkdownTitle } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
 
-import { renderedNarrationText, StoryNarrationControls } from "./story-narration-controls";
+import { StoryNarrationControls } from "./story-narration-controls";
 
 type PublicStoryReaderProps = {
   seriesStories: readonly PublishedSeriesStory[];
@@ -191,31 +191,22 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
             ) : null}
           </header>
 
-          <StoryNarrationControls
-            bookLanguage={story.book.language}
-            key={`${story.publicId}:${story.updatedAt}`}
-            getText={() =>
-              story.chapters
-                .map((chapter) => {
-                  const section = chapterRefs.current[chapter.id];
-                  if (!section) return "";
-                  const paged = section.querySelector("[data-pagination-source]");
-                  const body = section.querySelector("[data-narration-body]");
-                  const text = paged
-                    ? Array.from(paged.children)
-                        .filter((child) => child.tagName !== "HEADER")
-                        .map(renderedNarrationText)
-                        .join("\n")
-                    : body
-                      ? renderedNarrationText(body)
-                      : "";
-                  return chapter.title.trim() !== story.book.title.trim()
-                    ? `${chapter.title}\n${text}`
-                    : text;
-                })
-                .join("\n")
-            }
-          />
+          {story.audio?.version === story.updatedAt ? (
+            <StoryNarrationControls
+              key={story.audio.generatedAt}
+              chapters={
+                "chapters" in story.audio
+                  ? story.audio.chapters
+                  : [
+                      {
+                        chapterId: story.chapters[0]?.id ?? "story",
+                        title: "Full story",
+                        chunks: [{ chunkIndex: 0, url: story.audio.url, durationSeconds: 1 }],
+                      },
+                    ]
+              }
+            />
+          ) : null}
 
           <div className="divide-y divide-border">
             {story.chapters.map((chapter) => {

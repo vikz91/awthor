@@ -8,6 +8,7 @@ import {
   publishedStorySchema,
   toPublishedSeriesStory,
 } from "./published-story-snapshot";
+import { removeRecording } from "./story-audio";
 
 export {
   buildPublishedStory,
@@ -73,12 +74,19 @@ export async function listPublishedStoriesInSeries(
 }
 
 export async function savePublishedStory(database: Db, story: PublishedStory) {
+  const snapshot = { ...story };
+  delete snapshot.audio;
+  const previous = await collection(database).findOne({
+    userId: story.userId,
+    bookId: story.bookId,
+  });
   await collection(database).updateOne(
     { userId: story.userId, bookId: story.bookId },
-    { $set: story },
+    { $set: snapshot, $unset: { audio: "", audioGeneration: "" } },
     { upsert: true },
   );
-  return story;
+  await removeRecording(previous?.audio);
+  return snapshot;
 }
 
 export async function removePublishedStory(
@@ -87,5 +95,14 @@ export async function removePublishedStory(
   bookId: string,
   options: { session?: ClientSession } = {},
 ) {
-  return collection(database).deleteOne({ userId, bookId }, { session: options.session });
+  const previous = await collection(database).findOne(
+    { userId, bookId },
+    { session: options.session },
+  );
+  const result = await collection(database).deleteOne(
+    { userId, bookId },
+    { session: options.session },
+  );
+  if (!options.session) await removeRecording(previous?.audio);
+  return result;
 }

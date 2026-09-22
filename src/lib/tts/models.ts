@@ -115,31 +115,15 @@ export function makePassages(
           "This passage contains an unsupported language. Choose a language below if detection is incorrect.",
         );
       }
-      passages.push({ text: part, language: choice === "auto" ? (script ?? fallback) : choice });
+      const language = choice === "auto" ? (script ?? fallback) : choice;
+      const previous = passages.at(-1);
+      // Fewer audio boundaries also amortize the fixed cost of each inference call.
+      if (previous?.language === language && previous.text.length + part.length + 1 <= 80) {
+        previous.text += ` ${part}`;
+      } else {
+        passages.push({ text: part, language });
+      }
     }
   }
   return passages;
-}
-
-export type Preparation = { percent?: number; seconds?: number };
-
-export function downloadEstimate(loaded: number, total: number, elapsedMs: number): Preparation {
-  if (total <= 0 || loaded < 0) return {};
-  const percent = Math.min(100, Math.floor((loaded / total) * 100));
-  const seconds =
-    elapsedMs >= 1000 && loaded > 0 && loaded < total
-      ? Math.ceil(((total - loaded) * elapsedMs) / loaded / 1000)
-      : undefined;
-  return { percent, seconds };
-}
-
-export function preparationLabel(progress: Preparation): string {
-  const percent = progress.percent === undefined ? "" : ` · ${progress.percent}%`;
-  const eta =
-    progress.seconds === undefined
-      ? ""
-      : progress.seconds < 60
-        ? ` · ~${progress.seconds}s left`
-        : ` · ~${Math.ceil(progress.seconds / 60)} min left`;
-  return `Preparing${percent}${eta}…`;
 }

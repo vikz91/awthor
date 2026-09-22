@@ -1,104 +1,113 @@
 # Published story narration
 
-Published `/stories/[publicId]` pages show one outlined **Listen** button. Opening it
-starts on-device MMS narration and reveals Play/Pause, a 0.5× / 1× / 1.5× / 2× speed
-slider, a small language selector, and Close. Private Read/Write pages do not import
-this feature. No narration endpoint, API key, or server inference is used.
+Publish first, then select **Generate audio** in the publish modal. The Next.js
+Node.js route runs MMS using native ONNX on the server and writes each audio chunk
+directly to Vercel Blob. Readers and authors no longer download or execute models.
 
-## Loading and privacy
+## Chunking and progress
 
-A module worker loads Transformers.js and a pinned, quantized ONNX model only after
-Listen is clicked. Model files come from Hugging Face; the ONNX WASM runtime comes
-from the versioned jsDelivr URL selected by Transformers.js. These hosts receive
-normal asset requests (including IP address); manuscript text never leaves the
-browser for inference. Closing the player or leaving the page terminates the worker
-and releases the audio URL. Browser Cache Storage is reused where available; browser
-storage eviction and private-mode limits can cause downloads again.
+Chapters retain their published order. Each chapter has its own ordered chunks,
+targeting a maximum of 120 words or 1,800 characters. A chunk contains smaller MMS
+inference passages; sentences stay intact except for the existing 220-character
+inference limit. Chapters never share a chunk. Long chapters have multiple chunks.
 
-The compact “Preparing…” label reports model-download percentage and approximate
-remaining download time once at least one second of real throughput is observed.
-Runtime initialization and audio generation have no fabricated ETA. A connection
-stall or inference hang times out after two minutes without progress. Retry starts
-a fresh worker and reuses successfully cached assets. Only one model session and
-at most two audio passages are retained at once.
+The browser coordinates two requests at once. MongoDB also enforces at most two
+active chunk leases per story, including across tabs. A lease is tied to the job,
+published version, chunk index and unique attempt ID. A timed-out invocation can be
+retried after its six-minute lease expires. Completed chunks are not regenerated.
 
-## Languages
+The modal reports chunks complete, chapters complete, percentage and approximate
+remaining time. A chapter is complete only when all its chunks are ready. ETA starts
+with “Estimating time…” and uses aggregate completion throughput, excluding work
+already completed before resuming. Chunk lengths, cold starts and voice changes can
+make this estimate fluctuate.
 
-The published snapshot already contains `book.language`; no schema or API change
-is needed. Names, native names, ISO codes and locale forms are recognized for
-English, Hindi, Bengali, Tamil and Kannada. In Auto mode, native script detection
-selects the model for each short passage, overcoming the historical English book
-default. The saved language supplies the fallback for passages without detectable
-letters. Explicitly unsupported book languages show a language-selection message
-instead of silently choosing English.
-
-Script identification is a heuristic, not universal language identification:
-Devanagari also represents languages other than Hindi, Bengali script can represent
-Assamese, and Latin script does not establish English. Romanized Indian text and
-language mixing within a sentence are not reliably identified. The reader can force
-one of the five languages; changing it restarts narration. MMS is trained on native
-scripts, so selecting Bengali for romanized Bengali does not provide transliteration
-or guarantee useful pronunciation. Mixed-language passages work best when separated
-by sentence punctuation. Automatic switching can download more than one voice.
-
-| Language | ONNX model | Quantized bytes |
-| --- | --- | ---: |
-| English | Xenova/mms-tts-eng | 38,361,643 |
-| Hindi | Xenova/mms-tts-hin | 38,368,171 |
-| Bengali | payam1394/traxlate-mms-tts-ben | 38,303,469 |
-| Tamil | payam1394/traxlate-mms-tts-tam | 38,300,398 |
-| Kannada | onnx-community/mms-tts-kan-ONNX | 37,744,174 |
-
-Immutable repository revisions are pinned in `src/lib/tts/models.ts`. These are
-community ONNX conversions of Meta's corresponding `facebook/mms-tts-*` checkpoints;
-no remote custom model code is executed.
-The Kannada export needs a narrowly scoped, checksum-verified graph-padding repair
-before inference; its repaired bytes use a separate versioned cache filename. Inference explicitly selects q8 and WASM
-with one thread, so it does not require WebGPU or cross-origin isolation. We do not
-bundle model weights in the app or download every language at startup.
+**Pause generation** stops scheduling requests. Already-running server requests may
+finish and save their output. Reopen the modal and select **Resume generation** to
+continue. The page must remain open to advance the queue; this version does not add a
+background scheduler. Failed requests receive two automatic retries, then retain all
+completed work for a manual resume. Changing language starts a new job.
 
 ## Playback
 
-Narration reads rendered chapter titles and body text once, including in Pages
-layout. UI chapter labels, Markdown markers, image URLs, and page furniture are
-excluded. Short passages bound inference memory; the next passage is prepared while
-the current one plays. Native audio pause resumes from the same position, and the
-speed slider uses pitch-preserving audio playback. Browser autoplay restrictions can
-require another Play tap after preparation. Hiding the page pauses playback;
-lock-screen/background listening is not promised. Position is kept only while the
-player stays open. Network/inference/audio errors show a retryable message.
+Only a complete recording matching the exact published snapshot enables **Listen**.
+The saved manifest has chapter IDs, titles and ordered chunks, each with a URL and
+duration. Files are not merged across chunks or chapters.
 
-## Licensing
+The player preloads the next chunk while playing the current one, advances across
+chapters, and provides a chapter selector, Play/Pause and 0.5× / 1× / 1.5× / 2× speed.
+Selecting a chapter starts its first chunk. Exact seeking inside a chapter is outside
+this version. Small audio-element transition gaps and slow-network buffering remain
+possible. Existing single-file recordings still play as “Full story”. Private
+Read/Write pages have no narration player.
 
-MMS weights retain Meta's **CC-BY-NC-4.0** licence, distinct from Awthor's
-AGPL-3.0-only source licence. Open-source distribution does not remove the model's
-noncommercial restriction. Model attribution, licence and modification notices are
-in `docs/tts-model-notices.md`. Downstream commercial deployments need a compatible
-model licence or separate permission.
+## Vercel configuration
+
+Connect a public Vercel Blob store and configure server-only `BLOB_READ_WRITE_TOKEN`.
+`BLOB_STORE_ID` may also be supplied by Vercel; the SDK uses the read/write token here.
+No token is sent to the browser. MongoDB and the existing Clerk publishing allowlist
+are required. Chunk requests authenticate ownership and accept only a server-planned
+chunk index, never client-supplied text or storage URLs.
+
+The chunk route uses `runtime = "nodejs"` and `maxDuration = 300`. Enable Fluid
+Compute for that duration on Vercel. Externalized Transformers.js/onnxruntime-node
+load native CPU bindings; no Edge runtime or GPU is used. Model weights download
+from pinned Hugging Face revisions into two per-process temporary cache directories.
+Each slot removes its previous voice when switching languages. Only two model
+sessions are retained per instance, using one inference thread each. Separate
+requests can run concurrently even if Vercel routes them to the same instance.
+
+English, Bengali, Hindi and Tamil use FP32. Kannada retains the checksum-verified,
+repaired q8 graph because its upstream FP32 export also has invalid padding. Warm
+instances reuse loaded voices; cold starts and model downloads increase latency.
+Vercel CPU performance and deployment packaging need measurement on a preview
+before claiming a production throughput improvement.
+
+Outputs are mono PCM16 WAV. At 16 kHz, a minute uses approximately 1.92 MB. Each chunk
+has its own Blob URL. Storage, delivery and active server CPU are subject to Vercel
+plan limits and charges. There is no third-party inference provider.
+
+Vercel references:
+- https://vercel.com/docs/functions/configuring-functions/duration
+- https://vercel.com/docs/functions/configuring-functions/memory
+- https://vercel.com/docs/vercel-blob/using-blob-sdk
+
+## Versioning and cleanup
+
+Republishing clears the audio manifest and active generation job. Finalization checks
+that every chunk is ready and atomically attaches the manifest only to the same
+published version. An old in-flight request cannot attach to a replacement job.
+Regeneration leaves the previous complete recording available until replacement.
+
+Replaced recordings and ordinary unpublishes remove their Blob files on a best-effort
+basis. Public URLs may remain cached briefly (60-second cache age); downloaded copies
+cannot be recalled. Interrupted uploads, abandoned language changes, database failures,
+and workspace-transaction deletions can leave unreferenced files. Periodic Blob
+reconciliation/garbage collection remains outside this implementation. Reconcile
+`narration/` against complete audio manifests and active generation chunks before
+cleaning up old assets.
+
+## Languages and licensing
+
+The saved book language and native script detection support English, Hindi, Bengali,
+Tamil and Kannada. An explicit override is available. Romanized text and languages
+sharing scripts need manual judgment. Markdown links are read as text, excluding
+URLs, image descriptions and raw HTML. Chapter titles and bodies are read in order.
+
+MMS weights retain Meta's **CC-BY-NC-4.0** licence, separate from Awthor's AGPL source
+licence. See `docs/tts-model-notices.md` for model sources, revisions and the Kannada
+repair. Open-source distribution does not remove the noncommercial restriction.
 
 ## Validation
 
-`bun scripts/verify-tts-kannada.ts /path/to/model_quantized.onnx` verifies the
-original and repaired Kannada checksums and exactly twelve changed bytes.
+`bun test src/lib/tts src/lib/database/published-stories.test.ts` covers chunk bounds,
+ordering, chapter completion, ETA, two-request scheduling, resume, WAV output,
+preloading, chapter jumps and playback races. Run lint and a production build too.
 
-`bun test src/lib/tts` covers language selection, chunking, honest download ETA,
-preparation cancellation, exact audio resume, bounded look-ahead, speed selection,
-completion/replay, retry and disposal. Browser testing uses a temporary local fixture
-with the real public-reader component and synthetic text; no production story or
-database is changed. Mobile viewport checks do not replace real iOS/Android tests.
-
-### Measured build (2026-09-22)
-
-The production build emits approximately 162 KB gzip of worker JavaScript including
-its loader/runtime chunks. The emitted WASM asset is 26.86 MB raw / 6.60 MB gzip;
-its runtime module is about 39 KB gzip. The public-reader chunk containing controls
-is 14.54 KB gzip **including the reader's other UI**, so that number is not the
-standalone controls delta. Model downloads remain separate, about 38 MB per language.
-The application bundle contains no model weights, and worker code is not executed
-before Listen. Transfer compression depends on the asset host.
-
-Real Chrome browser checks completed synthetic English, Bengali, Tamil, Hindi and
-repaired Kannada narration, plus paginated Kannada playback. Paper/Stone layouts
-were inspected at mobile, tablet and desktop widths. These checks establish runtime
-compatibility on this machine, not native-speaker pronunciation quality or measured
-physical-phone performance.
+`bun scripts/verify-server-audio.ts` is an explicit integration check requiring MongoDB
+and Blob credentials. It creates a unique temporary Mongo collection and synthetic
+audio files, exercises the real route logic and native inference with a test identity,
+then removes both. It does not exercise Clerk login. It checks ownership filters,
+leases, concurrency, resume, incomplete/stale finalization and manifest order. Two
+concurrent synthetic English chunks took about 45 seconds locally; that is not a
+Vercel performance measurement. All five voices produced native audio locally.

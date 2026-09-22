@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  detectLanguage,
-  downloadEstimate,
-  makePassages,
-  preparationLabel,
-  savedLanguage,
-} from "./models";
+import { detectLanguage, makePassages, savedLanguage } from "./models";
 
 describe("MMS language selection", () => {
   test("recognizes all five scripts and saved language names/codes", () => {
@@ -33,21 +27,17 @@ describe("MMS language selection", () => {
     expect(() => makePassages("Bonjour", "French", "auto")).toThrow("not supported");
     expect(makePassages("Bonjour", "French", "en")[0].language).toBe("en");
   });
-  test("splits danda and long passages without dropping text", () => {
-    expect(makePassages("पहला वाक्य। दूसरा वाक्य॥", "Hindi", "auto")).toHaveLength(2);
+  test("groups short sentences and preserves punctuation within the inference limit", () => {
+    expect(makePassages("पहला वाक्य। दूसरा वाक्य॥", "Hindi", "auto")).toEqual([
+      { text: "पहला वाक्य। दूसरा वाक्य॥", language: "hi" },
+    ]);
+    expect(makePassages("First. Second! Third?", "English", "auto")).toEqual([
+      { text: "First. Second! Third?", language: "en" },
+    ]);
     const input = "hello ".repeat(200).trim();
     const passages = makePassages(input, "English", "auto");
     expect(passages.every((p) => p.text.length <= 220)).toBe(true);
     expect(passages.map((p) => p.text).join(" ")).toBe(input);
     expect(makePassages("... \n", "English", "auto")).toEqual([]);
   });
-});
-
-test("download ETA needs a real sample and does not invent inference timing", () => {
-  expect(downloadEstimate(0, 0, 0)).toEqual({});
-  expect(downloadEstimate(25, 100, 500)).toEqual({ percent: 25, seconds: undefined });
-  expect(downloadEstimate(25, 100, 2000)).toEqual({ percent: 25, seconds: 6 });
-  expect(downloadEstimate(100, 100, 2000).seconds).toBeUndefined();
-  expect(preparationLabel({})).toBe("Preparing…");
-  expect(preparationLabel({ percent: 25, seconds: 6 })).toBe("Preparing · 25% · ~6s left…");
 });
