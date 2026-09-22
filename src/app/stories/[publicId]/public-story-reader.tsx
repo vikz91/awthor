@@ -192,15 +192,26 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
           </header>
 
           <StoryNarrationControls
+            bookLanguage={story.book.language}
             key={`${story.publicId}:${story.updatedAt}`}
             getText={() =>
               story.chapters
                 .map((chapter) => {
                   const section = chapterRefs.current[chapter.id];
                   if (!section) return "";
-                  return renderedNarrationText(
-                    section.querySelector("[data-pagination-source]") ?? section,
-                  );
+                  const paged = section.querySelector("[data-pagination-source]");
+                  const body = section.querySelector("[data-narration-body]");
+                  const text = paged
+                    ? Array.from(paged.children)
+                        .filter((child) => child.tagName !== "HEADER")
+                        .map(renderedNarrationText)
+                        .join("\n")
+                    : body
+                      ? renderedNarrationText(body)
+                      : "";
+                  return chapter.title.trim() !== story.book.title.trim()
+                    ? `${chapter.title}\n${text}`
+                    : text;
                 })
                 .join("\n")
             }
@@ -234,7 +245,7 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
                           {chapter.title}
                         </h2>
                       ) : null}
-                      <div className="mt-8 font-serif text-lg sm:text-xl">
+                      <div className="mt-8 font-serif text-lg sm:text-xl" data-narration-body>
                         <MarkdownManuscript source={withoutLeadingMarkdownTitle(chapter.body)} />
                       </div>
                     </>

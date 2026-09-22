@@ -1,144 +1,183 @@
 "use client";
 
-import { Pause, Play } from "lucide-react";
+import { Headphones, LoaderCircle, Pause, Play, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  localNarrationVoice,
-  type NarrationState,
-  StoryNarration,
-  splitNarration,
-} from "@/lib/story-narration";
+import { type LanguageChoice, makePassages, preparationLabel, ttsModels } from "@/lib/tts/models";
+import { MmsPlayer, type PlayerState } from "@/lib/tts/player";
 
-type Props = { getText: () => string };
+type Props = { getText: () => string; bookLanguage: string };
 
-export function StoryNarrationControls({ getText }: Props) {
-  const speedId = useId();
-  const [availability, setAvailability] = useState("Loading on-device voices…");
-  const [state, setState] = useState<NarrationState>("idle");
+export function StoryNarrationControls({ getText, bookLanguage }: Props) {
+  const id = useId();
+  const [expanded, setExpanded] = useState(false);
+  const [state, setState] = useState<PlayerState>({ status: "paused" });
   const [rate, setRate] = useState(1);
-  const player = useRef<StoryNarration | null>(null);
+  const [language, setLanguage] = useState<LanguageChoice>("auto");
+  const player = useRef<MmsPlayer | null>(null);
 
   useEffect(() => {
-    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-      setAvailability("Read aloud is not supported in this browser.");
-      return;
-    }
-    const synth = window.speechSynthesis;
-    const updateVoices = () => {
-      const voice = localNarrationVoice(synth.getVoices(), document.documentElement.lang || "en");
-      setAvailability(
-        voice
-          ? ""
-          : "No on-device voice available. Install a voice in your device’s speech settings.",
-      );
-    };
-    updateVoices();
-    synth.addEventListener("voiceschanged", updateVoices);
-    // Refresh after returning from system settings, including browsers without voiceschanged.
-    window.addEventListener("focus", updateVoices);
     const pauseWhenHidden = () => {
-      if (document.hidden && player.current) player.current.pause();
+      if (document.hidden) player.current?.pause();
     };
     document.addEventListener("visibilitychange", pauseWhenHidden);
     return () => {
-      synth.removeEventListener("voiceschanged", updateVoices);
-      window.removeEventListener("focus", updateVoices);
       document.removeEventListener("visibilitychange", pauseWhenHidden);
       player.current?.dispose();
       player.current = null;
     };
   }, []);
 
-  function toggle() {
-    if (state === "playing") {
-      player.current?.pause();
-      return;
-    }
-    if (!player.current) {
-      const synth = window.speechSynthesis;
-      const voice = localNarrationVoice(synth.getVoices(), document.documentElement.lang || "en");
-      if (!voice) {
-        setAvailability(
-          "No on-device voice available. Install a voice in your device’s speech settings.",
-        );
-        return;
+  function start(choice = language) {
+    setExpanded(true);
+    player.current?.dispose();
+    player.current = null;
+    try {
+      if (typeof Worker === "undefined" || typeof WebAssembly === "undefined") {
+        throw new Error("On-device narration is not supported in this browser.");
       }
-      const chunks = splitNarration(getText());
-      if (!chunks.length) {
-        setState("error");
-        return;
-      }
-      player.current = new StoryNarration(
-        synth,
-        (text) => new SpeechSynthesisUtterance(text),
-        chunks,
-        voice,
-        setState,
-      );
-      player.current.setRate(rate);
+      const passages = makePassages(getText(), bookLanguage, choice);
+      if (!passages.length) throw new Error("There is no story text to read yet.");
+      setState({ status: "preparing" });
+      player.current = new MmsPlayer(passages, setState);
+      player.current.start(rate);
+    } catch (error) {
+      setState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Couldn’t start narration. Try again.",
+      });
     }
-    player.current.play();
   }
 
+  function close() {
+    player.current?.dispose();
+    player.current = null;
+    setExpanded(false);
+    setState({ status: "paused" });
+  }
+
+  const active = state.status === "playing" || state.status === "preparing";
   const message =
-    availability ||
-    (state === "error"
-      ? "Playback stopped. Tap Play to try again."
-      : state === "finished"
-        ? "Story finished. Play again anytime."
-        : state === "paused"
-          ? "Paused. Play resumes from the current passage."
-          : "On-device narration · Keep this page open while listening.");
+    state.message ??
+    (state.status === "preparing"
+      ? preparationLabel(state.progress ?? {})
+      : state.status === "finished"
+        ? "Finished. Listen again anytime."
+        : state.status === "paused"
+          ? "Paused"
+          : "Playing on your device");
 
   return (
-    <div className="sticky top-3 z-20 mx-auto mt-6 max-w-md rounded-2xl border border-border bg-card p-3 text-card-foreground shadow-sm sm:p-4">
-      <div className="flex items-center gap-4">
+    <div className="sticky top-3 z-20 mx-auto mt-6 w-fit max-w-full">
+      {!expanded ? (
         <Button
-          aria-label={state === "playing" ? "Pause narration" : "Play narration"}
-          disabled={Boolean(availability)}
-          onClick={toggle}
+          onClick={() => start()}
           size="sm"
           type="button"
+          variant="outline"
+          aria-expanded={false}
+          aria-controls={id}
         >
-          {state === "playing" ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-          {state === "playing" ? "Pause" : "Play"}
+          <Headphones aria-hidden="true" /> Listen
         </Button>
-        <div className="min-w-0 flex-1">
-          <label className="mb-1 flex justify-between text-xs font-medium" htmlFor={speedId}>
-            <span>Reading speed</span>
-            <span>{rate}×</span>
-          </label>
-          <input
-            aria-valuetext={`${rate} times normal speed`}
-            className="block h-6 w-full cursor-pointer accent-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={Boolean(availability)}
-            id={speedId}
-            max={2}
-            min={0.5}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              setRate(next);
-              player.current?.setRate(next);
-            }}
-            step={0.5}
-            type="range"
-            value={rate}
-          />
-          <div
-            aria-hidden="true"
-            className="flex justify-between text-[0.65rem] tabular-nums text-muted-foreground"
-          >
-            <span>0.5×</span>
-            <span>1×</span>
-            <span>1.5×</span>
-            <span>2×</span>
+      ) : (
+        <section
+          aria-label="Story narration"
+          className="w-80 max-w-full rounded-xl border border-border bg-card p-3 text-card-foreground shadow-sm"
+          id={id}
+        >
+          <div className="flex items-center gap-3">
+            <Button
+              aria-label={active ? "Pause narration" : "Play narration"}
+              onClick={() => {
+                if (active) player.current?.pause();
+                else if (!player.current || state.status === "error") start();
+                else player.current.play();
+              }}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              {active ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            </Button>
+            <div className="min-w-0 flex-1">
+              <label className="flex justify-between text-xs" htmlFor={`${id}-speed`}>
+                <span>Speed</span>
+                <span className="tabular-nums">{rate}×</span>
+              </label>
+              <input
+                aria-valuetext={`${rate} times normal speed`}
+                className="block h-6 w-full cursor-pointer accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                id={`${id}-speed`}
+                min={0.5}
+                max={2}
+                step={0.5}
+                type="range"
+                value={rate}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  setRate(next);
+                  player.current?.setRate(next);
+                }}
+              />
+              <div
+                aria-hidden="true"
+                className="flex justify-between text-[0.6rem] tabular-nums text-muted-foreground"
+              >
+                <span>0.5×</span>
+                <span>1×</span>
+                <span>1.5×</span>
+                <span>2×</span>
+              </div>
+            </div>
+            <Button
+              aria-label="Close narration"
+              onClick={close}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <X aria-hidden="true" />
+            </Button>
           </div>
-        </div>
-      </div>
-      <p aria-live="polite" className="mt-2 text-xs leading-5 text-muted-foreground">
-        {message}
-      </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <output className="flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">
+              {state.status === "preparing" ? (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-3 animate-spin motion-reduce:animate-none"
+                />
+              ) : null}
+              {message}
+            </output>
+            <label className="sr-only" htmlFor={`${id}-language`}>
+              Narration language
+            </label>
+            <select
+              className="max-w-full rounded-md border border-border bg-background px-1.5 py-1 text-xs text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              id={`${id}-language`}
+              value={language}
+              onChange={(event) => {
+                const next = event.target.value as LanguageChoice;
+                setLanguage(next);
+                start(next);
+              }}
+            >
+              <option value="auto">Auto language</option>
+              {Object.entries(ttsModels).map(([code, model]) => (
+                <option key={code} value={code}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {state.status === "preparing" ? (
+            <p className="mt-1 text-[0.6rem] text-muted-foreground">
+              First use downloads a voice (~38 MB). Keep this page open.
+            </p>
+          ) : null}
+        </section>
+      )}
     </div>
   );
 }
