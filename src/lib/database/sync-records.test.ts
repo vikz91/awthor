@@ -40,8 +40,10 @@ function createDatabase(existing: SyncedRecord | null = null) {
       }
       if (name === "publishedStories") {
         return {
+          findOne: async () => null,
           deleteOne: async (filter: unknown, options: unknown) => {
             publicationDeletes.push({ filter, options });
+            return { deletedCount: 1 };
           },
         };
       }
