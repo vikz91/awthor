@@ -1,9 +1,18 @@
 import { z } from "zod";
 import { type Book, bookSchema, type Chapter, chapterSchema } from "@/lib/repository";
+import { audioManifestSchema } from "@/lib/tts/chunks";
 
 export const publicIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{16,128}$/);
 
 export const publishedStorySchema = z.object({
+  audio: z
+    .object({
+      url: z.string().url(),
+      version: z.string().datetime(),
+      generatedAt: z.string().datetime(),
+    })
+    .or(audioManifestSchema)
+    .optional(),
   authorEmail: z.string().email().or(z.literal("")).default(""),
   authorName: z.string().default(""),
   book: bookSchema,

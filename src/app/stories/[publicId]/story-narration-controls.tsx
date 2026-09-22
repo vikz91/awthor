@@ -1,161 +1,133 @@
 "use client";
 
-import { Pause, Play } from "lucide-react";
+import { Headphones, Pause, Play, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  localNarrationVoice,
-  type NarrationState,
-  StoryNarration,
-  splitNarration,
-} from "@/lib/story-narration";
+import type { AudioManifest } from "@/lib/tts/chunks";
+import { AudioPlaylist } from "@/lib/tts/playlist";
 
-type Props = { getText: () => string };
-
-export function StoryNarrationControls({ getText }: Props) {
-  const speedId = useId();
-  const [availability, setAvailability] = useState("Loading on-device voices…");
-  const [state, setState] = useState<NarrationState>("idle");
+export function StoryNarrationControls({ chapters }: Pick<AudioManifest, "chapters">) {
+  const id = useId();
+  const audio = useRef<AudioPlaylist | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [message, setMessage] = useState("Paused");
+  const [chapterId, setChapterId] = useState(chapters[0]?.chapterId ?? "");
   const [rate, setRate] = useState(1);
-  const player = useRef<StoryNarration | null>(null);
 
-  useEffect(() => {
-    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-      setAvailability("Read aloud is not supported in this browser.");
-      return;
-    }
-    const synth = window.speechSynthesis;
-    const updateVoices = () => {
-      const voice = localNarrationVoice(synth.getVoices(), document.documentElement.lang || "en");
-      setAvailability(
-        voice
-          ? ""
-          : "No on-device voice available. Install a voice in your device’s speech settings.",
-      );
-    };
-    updateVoices();
-    synth.addEventListener("voiceschanged", updateVoices);
-    // Refresh after returning from system settings, including browsers without voiceschanged.
-    window.addEventListener("focus", updateVoices);
-    const pauseWhenHidden = () => {
-      if (document.hidden && player.current) player.current.pause();
-    };
-    document.addEventListener("visibilitychange", pauseWhenHidden);
-    return () => {
-      synth.removeEventListener("voiceschanged", updateVoices);
-      window.removeEventListener("focus", updateVoices);
-      document.removeEventListener("visibilitychange", pauseWhenHidden);
-      player.current?.dispose();
-      player.current = null;
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      audio.current?.dispose();
+      audio.current = null;
+    },
+    [],
+  );
 
-  function toggle() {
-    if (state === "playing") {
-      player.current?.pause();
-      return;
-    }
-    if (!player.current) {
-      const synth = window.speechSynthesis;
-      const voice = localNarrationVoice(synth.getVoices(), document.documentElement.lang || "en");
-      if (!voice) {
-        setAvailability(
-          "No on-device voice available. Install a voice in your device’s speech settings.",
-        );
-        return;
-      }
-      const chunks = splitNarration(getText());
-      if (!chunks.length) {
-        setState("error");
-        return;
-      }
-      player.current = new StoryNarration(
-        synth,
-        (text) => new SpeechSynthesisUtterance(text),
-        chunks,
-        voice,
-        setState,
-      );
-      player.current.setRate(rate);
-    }
-    player.current.play();
+  function play() {
+    setExpanded(true);
+    if (!audio.current)
+      audio.current = new AudioPlaylist({ chapters }, (state) => {
+        setPlaying(state.playing);
+        setMessage(state.message);
+        setChapterId(state.chapterId);
+      });
+    audio.current.setRate(rate);
+    void audio.current.play();
   }
 
-  const message =
-    availability ||
-    (state === "error"
-      ? "Playback stopped. Tap Play to try again."
-      : state === "finished"
-        ? "Story finished. Play again anytime."
-        : state === "paused"
-          ? "Paused. Play resumes from the current passage."
-          : "On-device narration · Keep this page open while listening.");
-
   return (
-    <div className="sticky top-3 z-20 mx-auto mt-6 max-w-md rounded-2xl border border-border bg-card p-3 text-card-foreground shadow-sm sm:p-4">
-      <div className="flex items-center gap-4">
+    <div className="sticky top-3 z-20 mx-auto mt-6 w-fit max-w-full">
+      {!expanded ? (
         <Button
-          aria-label={state === "playing" ? "Pause narration" : "Play narration"}
-          disabled={Boolean(availability)}
-          onClick={toggle}
+          aria-controls={id}
+          aria-expanded={false}
+          onClick={() => void play()}
           size="sm"
-          type="button"
+          variant="outline"
         >
-          {state === "playing" ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-          {state === "playing" ? "Pause" : "Play"}
+          <Headphones aria-hidden="true" />
+          Listen
         </Button>
-        <div className="min-w-0 flex-1">
-          <label className="mb-1 flex justify-between text-xs font-medium" htmlFor={speedId}>
-            <span>Reading speed</span>
-            <span>{rate}×</span>
-          </label>
-          <input
-            aria-valuetext={`${rate} times normal speed`}
-            className="block h-6 w-full cursor-pointer accent-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={Boolean(availability)}
-            id={speedId}
-            max={2}
-            min={0.5}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              setRate(next);
-              player.current?.setRate(next);
-            }}
-            step={0.5}
-            type="range"
-            value={rate}
-          />
-          <div
-            aria-hidden="true"
-            className="flex justify-between text-[0.65rem] tabular-nums text-muted-foreground"
-          >
-            <span>0.5×</span>
-            <span>1×</span>
-            <span>1.5×</span>
-            <span>2×</span>
+      ) : (
+        <section
+          id={id}
+          aria-label="Story narration"
+          className="w-80 max-w-full rounded-xl border border-border bg-card p-3 text-card-foreground shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <Button
+              aria-label={playing ? "Pause narration" : "Play narration"}
+              size="icon-sm"
+              variant="outline"
+              onClick={() => {
+                if (playing) audio.current?.pause();
+                else void play();
+              }}
+            >
+              {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            </Button>
+            <div className="min-w-0 flex-1">
+              <label htmlFor={`${id}-speed`} className="flex justify-between text-xs">
+                <span>Speed</span>
+                <span>{rate}×</span>
+              </label>
+              <input
+                id={`${id}-speed`}
+                type="range"
+                min={0.5}
+                max={2}
+                step={0.5}
+                value={rate}
+                aria-valuetext={`${rate} times normal speed`}
+                className="block h-6 w-full cursor-pointer accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  setRate(next);
+                  audio.current?.setRate(next);
+                }}
+              />
+              <div
+                aria-hidden="true"
+                className="flex justify-between text-[0.6rem] text-muted-foreground"
+              >
+                <span>0.5×</span>
+                <span>1×</span>
+                <span>1.5×</span>
+                <span>2×</span>
+              </div>
+            </div>
+            <Button
+              aria-label="Close narration"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => {
+                audio.current?.dispose();
+                audio.current = null;
+                setExpanded(false);
+                setPlaying(false);
+              }}
+            >
+              <X aria-hidden="true" />
+            </Button>
           </div>
-        </div>
-      </div>
-      <p aria-live="polite" className="mt-2 text-xs leading-5 text-muted-foreground">
-        {message}
-      </p>
+          <label htmlFor={`${id}-chapter`} className="mt-3 block text-xs text-muted-foreground">
+            Chapter
+          </label>
+          <select
+            id={`${id}-chapter`}
+            value={chapterId}
+            className="mt-1 w-full min-w-0 rounded-md border border-border bg-background p-1.5 text-xs text-foreground focus-visible:outline-ring"
+            onChange={(event) => audio.current?.selectChapter(event.target.value)}
+          >
+            {chapters.map((chapter, index) => (
+              <option key={chapter.chapterId} value={chapter.chapterId}>
+                {index + 1}. {chapter.title}
+              </option>
+            ))}
+          </select>
+          <output className="mt-3 block text-[0.65rem] text-muted-foreground">{message}</output>
+        </section>
+      )}
     </div>
   );
-}
-
-/** Read rendered content so Markdown markers, link URLs and page furniture stay silent. */
-export function renderedNarrationText(element: Element): string {
-  if (["IMG", "SCRIPT", "STYLE"].includes(element.tagName)) return "";
-  if (element.tagName === "BR") return "\n";
-  const text = Array.from(element.childNodes, (node) =>
-    node.nodeType === Node.TEXT_NODE
-      ? (node.textContent ?? "")
-      : node instanceof Element
-        ? renderedNarrationText(node)
-        : "",
-  ).join("");
-  if (element.tagName === "TD" || element.tagName === "TH") return `${text} `;
-  return /^(P|H[1-6]|LI|BLOCKQUOTE|PRE|TR|DIV|HEADER|SECTION)$/.test(element.tagName)
-    ? `${text}\n`
-    : text;
 }

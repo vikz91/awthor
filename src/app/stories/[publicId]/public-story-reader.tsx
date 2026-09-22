@@ -11,7 +11,7 @@ import type { PublishedSeriesStory, PublishedStory } from "@/lib/database/publis
 import { countManuscript, withoutLeadingMarkdownTitle } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
 
-import { renderedNarrationText, StoryNarrationControls } from "./story-narration-controls";
+import { StoryNarrationControls } from "./story-narration-controls";
 
 type PublicStoryReaderProps = {
   seriesStories: readonly PublishedSeriesStory[];
@@ -191,20 +191,22 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
             ) : null}
           </header>
 
-          <StoryNarrationControls
-            key={`${story.publicId}:${story.updatedAt}`}
-            getText={() =>
-              story.chapters
-                .map((chapter) => {
-                  const section = chapterRefs.current[chapter.id];
-                  if (!section) return "";
-                  return renderedNarrationText(
-                    section.querySelector("[data-pagination-source]") ?? section,
-                  );
-                })
-                .join("\n")
-            }
-          />
+          {story.audio?.version === story.updatedAt ? (
+            <StoryNarrationControls
+              key={story.audio.generatedAt}
+              chapters={
+                "chapters" in story.audio
+                  ? story.audio.chapters
+                  : [
+                      {
+                        chapterId: story.chapters[0]?.id ?? "story",
+                        title: "Full story",
+                        chunks: [{ chunkIndex: 0, url: story.audio.url, durationSeconds: 1 }],
+                      },
+                    ]
+              }
+            />
+          ) : null}
 
           <div className="divide-y divide-border">
             {story.chapters.map((chapter) => {
@@ -234,7 +236,7 @@ export function PublicStoryReader({ seriesStories, story }: PublicStoryReaderPro
                           {chapter.title}
                         </h2>
                       ) : null}
-                      <div className="mt-8 font-serif text-lg sm:text-xl">
+                      <div className="mt-8 font-serif text-lg sm:text-xl" data-narration-body>
                         <MarkdownManuscript source={withoutLeadingMarkdownTitle(chapter.body)} />
                       </div>
                     </>

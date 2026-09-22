@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { PublishAudio } from "./publish-audio";
 
 type Publication = {
   publicId: string;
@@ -26,6 +27,7 @@ type PublishState = "idle" | "loading" | "publishing" | "unpublishing" | "error"
 export function BookPublish({ bookId }: { bookId: string }) {
   const { configured, signedIn, status: syncStatus, syncNow } = useSync();
   const [publication, setPublication] = useState<Publication | null>(null);
+  const [audioBusy, setAudioBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<PublishState>("loading");
   const [message, setMessage] = useState("Checking publishing status…");
@@ -109,7 +111,8 @@ export function BookPublish({ bookId }: { bookId: string }) {
     }
   }
 
-  const working = state === "loading" || state === "publishing" || state === "unpublishing";
+  const working =
+    audioBusy || state === "loading" || state === "publishing" || state === "unpublishing";
   const label = publication ? "Published story" : "Publish story";
   const Icon = working ? LoaderCircle : publication ? Check : Globe2;
 
@@ -129,8 +132,16 @@ export function BookPublish({ bookId }: { bookId: string }) {
           className={cn(working && "animate-spin motion-reduce:animate-none")}
         />
       </Button>
-      <Dialog onOpenChange={setOpen} open={open}>
-        <DialogContent className="gap-4 sm:max-w-sm">
+      <Dialog
+        onOpenChange={(next) => {
+          if (!audioBusy) setOpen(next);
+        }}
+        open={open}
+      >
+        <DialogContent
+          showCloseButton={!audioBusy}
+          className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto sm:max-w-lg"
+        >
           <DialogHeader>
             <DialogTitle>{publication ? "Public story" : "Publish this story"}</DialogTitle>
             <DialogDescription>{message}</DialogDescription>
@@ -145,7 +156,15 @@ export function BookPublish({ bookId }: { bookId: string }) {
               Sign in and select Sync before publishing. Nothing is uploaded until you do.
             </p>
           ) : null}
-          <DialogFooter>
+          {publication ? (
+            <PublishAudio
+              key={publication.updatedAt}
+              bookId={bookId}
+              disabled={state === "publishing" || state === "unpublishing"}
+              onBusy={setAudioBusy}
+            />
+          ) : null}
+          <DialogFooter className="min-w-0 sm:flex-wrap">
             {publication ? (
               <>
                 <Button
